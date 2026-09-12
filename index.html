@@ -325,6 +325,13 @@ select option { background: #ffffff !important; color: #111 !important; }
     <textarea id="ticketEventoDescripcion" rows="3" placeholder="Información del evento..." class="w-full mt-1"></textarea>
 </div>
 
+<div>
+    <label class="text-xs font-bold text-gray-300">
+        Finalización venta anticipada
+    </label>
+    <input type="datetime-local" id="ticketEventoFinVentaAnticipada" class="w-full mt-1">
+</div>
+
 <div class="border-t border-zinc-700 pt-4">
 
     <div class="text-sm font-black text-white mb-3">
@@ -1347,7 +1354,7 @@ function crearNuevoEvento() {
 function limpiarFormularioEventoTicketera() {
 
     eventoTicketeraEditando = null;
-
+document.getElementById("ticketEventoFinVentaAnticipada").value = "";
     document.getElementById("ticketEventoNombre").value = "";
     document.getElementById("ticketEventoFlyer").value = "";
     document.getElementById("ticketEventoFecha").value = "";
@@ -2373,11 +2380,13 @@ function renderizarEventosTicketera() {
                 </div>
 
                 <span class="text-[9px] font-black px-2 py-1 rounded-lg ${coloresEstado[evento.estado] || 'bg-gray-600'} text-white ml-2 whitespace-nowrap">
-                    ${(evento.estado || "").toUpperCase()}
-                </span>
-
-            </div>
-
+    ${(evento.estado || "").toUpperCase()}
+</span>
+${
+    ventaAnticipadaFinalizada(evento)
+    ? `<span class="text-[9px] font-black px-2 py-1 rounded-lg bg-orange-600 text-white ml-1 whitespace-nowrap">VENTA ANTICIPADA FINALIZADA</span>`
+    : ""
+}
             <div class="flex gap-2 mt-3">
 
                 <button onclick="editarEventoTicketera('${evento.id}')"
@@ -2395,7 +2404,10 @@ function renderizarEventosTicketera() {
         </div>
     `).join("");
 }
-
+function ventaAnticipadaFinalizada(evento) {
+    if (!evento.finVentaAnticipada) return false;
+    return new Date() >= new Date(evento.finVentaAnticipada);
+}
 function renderizarEventosTicketeraPublica() {
 
     const lista = document.getElementById("listaEventosTicketeraPublica");
@@ -2464,33 +2476,40 @@ function renderizarEventosTicketeraPublica() {
                         : ""
                     }
 
-                    <div class="text-lg font-black text-gray-900 mt-4">
-                        $ ${Number(evento.precio || 0).toLocaleString("es-AR")}
-                    </div>
+                  <div class="text-lg font-black text-gray-900 mt-4">
+    $ ${Number(evento.precio || 0).toLocaleString("es-AR")}
+</div>
 
-                    ${
-                        pausado
-                        ? `
-                            <button disabled
-                                class="w-full mt-5 bg-gray-300 text-gray-500 font-bold py-3 rounded-xl cursor-not-allowed">
-                                VENTA PAUSADA
-                            </button>
-                          `
-                        : sinStock
-                        ? `
-                            <button disabled
-                                class="w-full mt-5 bg-gray-300 text-gray-500 font-bold py-3 rounded-xl cursor-not-allowed">
-                                SIN ENTRADAS DISPONIBLES
-                            </button>
-                          `
-                        : `
-                            <button
-                                onclick="comprarEntradaTicketera('${evento.id}')"
-                                class="w-full mt-5 bg-black hover:bg-gray-800 text-white font-bold py-3 rounded-xl transition">
-                                COMPRAR ENTRADA
-                            </button>
-                          `
-                    }
+${
+    finalizada
+    ? `
+        <button disabled
+            class="w-full mt-5 bg-gray-300 text-gray-500 font-bold py-3 rounded-xl cursor-not-allowed">
+            VENTA ANTICIPADA FINALIZADA
+        </button>
+      `
+    : pausado
+    ? `
+        <button disabled
+            class="w-full mt-5 bg-gray-300 text-gray-500 font-bold py-3 rounded-xl cursor-not-allowed">
+            VENTA PAUSADA
+        </button>
+      `
+    : sinStock
+    ? `
+        <button disabled
+            class="w-full mt-5 bg-gray-300 text-gray-500 font-bold py-3 rounded-xl cursor-not-allowed">
+            SIN ENTRADAS DISPONIBLES
+        </button>
+      `
+    : `
+        <button
+            onclick="comprarEntradaTicketera('${evento.id}')"
+            class="w-full mt-5 bg-black hover:bg-gray-800 text-white font-bold py-3 rounded-xl transition">
+            COMPRAR ENTRADA
+        </button>
+      `
+}
 
                 </div>
 
@@ -2506,6 +2525,7 @@ async function guardarNuevoEvento() {
     const flyer = document.getElementById("ticketEventoFlyer").files[0];
     const fecha = document.getElementById("ticketEventoFecha").value;
     const hora = document.getElementById("ticketEventoHora").value;
+    const finVentaAnticipada = document.getElementById("ticketEventoFinVentaAnticipada").value;
     const lugar = document.getElementById("ticketEventoLugar").value.trim();
     const direccion = document.getElementById("ticketEventoDireccion").value.trim();
     const descripcion = document.getElementById("ticketEventoDescripcion").value.trim();
@@ -2549,7 +2569,7 @@ async function guardarNuevoEvento() {
 
             const datosActualizados = {
                 nombre, fecha, hora, lugar, direccion, descripcion,
-                alias, titular, cbu, precio, capacidad, estado
+                alias, titular, cbu, precio, capacidad, estado, finVentaAnticipada
             };
 
             if (flyerClave) datosActualizados.flyerClave = flyerClave;
@@ -2565,7 +2585,7 @@ async function guardarNuevoEvento() {
 
             const evento = {
                 nombre, fecha, hora, lugar, direccion, descripcion,
-                alias, titular, cbu, precio, capacidad, estado,
+                alias, titular, cbu, precio, capacidad, estado, finVentaAnticipada,
                 flyerClave, qrPagoClave
             };
 
@@ -2646,6 +2666,7 @@ function editarEventoTicketera(id) {
     document.getElementById("ticketEventoFlyer").value = "";
     document.getElementById("ticketEventoFecha").value = evento.fecha || "";
     document.getElementById("ticketEventoHora").value = evento.hora || "";
+    document.getElementById("ticketEventoFinVentaAnticipada").value = evento.finVentaAnticipada || "";
     document.getElementById("ticketEventoLugar").value = evento.lugar || "";
     document.getElementById("ticketEventoDireccion").value = evento.direccion || "";
     document.getElementById("ticketEventoDescripcion").value = evento.descripcion || "";
