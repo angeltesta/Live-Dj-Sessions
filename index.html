@@ -936,10 +936,7 @@ select option { background: #ffffff !important; color: #111 !important; }
             🔄 ESCANEAR OTRA ENTRADA
         </button>
 
-        <button onclick="detenerControlIngresoTicketera(); navigate('page-admin-ticketera')" class="w-full mt-3 bg-zinc-800 border border-zinc-600 hover:bg-zinc-700 text-white font-bold px-6 py-3 rounded-xl text-xs">
-            VOLVER A TICKETERA
-        </button>
-
+     
     </div>
 
 </div>
@@ -1200,7 +1197,7 @@ window.onload = async function() {
 
     if(urlParams.get('go') === 'ingreso') navigate('page-ingreso');
     else if(urlParams.get('go') === 'ticketera-publica') navigate('page-ticketera-publica');
-
+    else if(urlParams.get('go') === 'control-ticketera') navigate('page-control-ticketera');
     else generarQRCodigo();
 
 };
@@ -1969,7 +1966,7 @@ function renderizarMisEntradas(ventaId) {
 // TICKETERA - CONTROL DE INGRESO (ESCANEO DE QR)
 // =====================================================================
 
-let html5QrcodeScannerTicketera = null;
+let html5QrcodeTicketera = null;
 let escaneoTicketeraActivo = false;
 let escaneoTicketeraProcesando = false;
 
@@ -1988,7 +1985,7 @@ function iniciarControlIngresoTicketera() {
     const contenedor = document.getElementById("lector-qr-ticketera");
     if (contenedor) contenedor.innerHTML = "";
 
-    if (typeof Html5QrcodeScanner === "undefined") {
+    if (typeof Html5Qrcode === "undefined") {
         if (resultado) {
             resultado.classList.remove("hidden");
             resultado.innerHTML = `<div class="bg-yellow-600 text-white font-bold text-center py-3 rounded-xl text-xs">No se pudo cargar la cámara. Verificá tu conexión a internet.</div>`;
@@ -1996,33 +1993,33 @@ function iniciarControlIngresoTicketera() {
         return;
     }
 
-    html5QrcodeScannerTicketera = new Html5QrcodeScanner(
-        "lector-qr-ticketera",
-        { fps: 10, qrbox: 230 },
-        false
-    );
+    html5QrcodeTicketera = new Html5Qrcode("lector-qr-ticketera");
 
-    html5QrcodeScannerTicketera.render(
+    html5QrcodeTicketera.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 230 },
         onEscaneoExitosoTicketera,
         () => {}
-    );
-
-    escaneoTicketeraActivo = true;
+    ).then(() => {
+        escaneoTicketeraActivo = true;
+    }).catch(() => {
+        if (resultado) {
+            resultado.classList.remove("hidden");
+            resultado.innerHTML = `<div class="bg-yellow-600 text-white font-bold text-center py-3 rounded-xl text-xs">No se pudo acceder a la cámara.</div>`;
+        }
+    });
 }
 
 function detenerControlIngresoTicketera() {
 
-    if (html5QrcodeScannerTicketera && escaneoTicketeraActivo) {
-        try {
-            html5QrcodeScannerTicketera.clear();
-        } catch (e) {
-            // La cámara ya pudo haberse liberado
-        }
+    if (html5QrcodeTicketera && escaneoTicketeraActivo) {
+        html5QrcodeTicketera.stop().then(() => {
+            html5QrcodeTicketera.clear();
+        }).catch(() => {});
     }
 
     escaneoTicketeraActivo = false;
 }
-
 function onEscaneoExitosoTicketera(codigoDecodificado) {
 
     if (escaneoTicketeraProcesando) return;
