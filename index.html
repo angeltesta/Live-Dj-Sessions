@@ -1,0 +1,2842 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live DJ Sessions</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Librería QR -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Librerías para Generación de PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <!-- Librería de escaneo QR (Ticketera - Control de Ingreso) -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8" type="text/javascript"></script>
+
+    <!-- SDKs de Firebase (Compatibilidad Web) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<!-- Firebase Storage NO se utiliza: los archivos de Ticketera se guardan en Netlify Blobs -->
+
+
+    <style>
+        body { background-color: #050505; color: white; font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+        .neon-text { text-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff, 0 0 30px #ff00ff; }
+        .neon-blue { text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff; }
+        .neon-box { box-shadow: 0 0 15px rgba(0, 255, 255, 0.4); }
+        
+        .page { display: none; min-height: 100vh; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .active { display: flex; }
+
+        input { background: rgba(255,255,255,0.05); border: 1px solid #444; border-radius: 12px; padding: 8px 16px; color: white; margin-bottom: 12px; width: 100%; text-align: center; font-size: 14px; }
+        input:focus { outline: none; border-color: #00ffff; box-shadow: 0 0 10px rgba(0,255,255,0.5); }
+
+        @keyframes popIn {
+            0% { transform: scale(0.7); opacity: 0; }
+            80% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+    </style>
+</head>
+<body>
+
+    <!-- ==================== PÁGINA 1: QR ==================== -->
+    <div id="page-qr" class="page active">
+        <h1 class="text-4xl font-extrabold neon-text mb-1 tracking-wider">LIVE</h1>
+        <h2 class="text-2xl font-bold neon-blue mb-8 tracking-widest">DJ SESSIONS</h2>
+        
+        <div class="relative flex items-center justify-center bg-white p-4 rounded-2xl shadow-[0_0_25px_rgba(255,255,255,0.3)] mb-6">
+            <div id="qrcode"></div>
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div class="bg-black border-2 border-cyan-400 rounded-full w-12 h-12 flex flex-col items-center justify-center p-1 shadow-lg">
+                    <span class="text-[9px] font-extrabold text-cyan-400 leading-none">LIVE</span>
+                    <span class="text-[7px] font-bold text-white leading-none">DJ</span>
+                </div>
+            </div>
+        </div>
+        
+        <button onclick="navigate('page-ingreso')" class="bg-white text-black px-8 py-2.5 rounded-xl font-black tracking-wider text-sm shadow-lg mb-8">SCAN ME</button>
+        <button onclick="navigate('page-admin')" class="text-gray-400 border border-gray-600 px-6 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-900 transition">BACK</button>
+    </div>
+
+    <!-- ==================== PÁGINA 2: ID / INGRESO ==================== -->
+    <div id="page-ingreso" class="page">
+        <h1 class="text-4xl font-extrabold neon-text mb-1">LIVE</h1>
+        <h2 class="text-2xl font-bold neon-blue mb-12">DJ SESSIONS</h2>
+        
+        <label class="text-xs text-gray-400 mb-2 font-bold tracking-widest">INGRESA TU NÚMERO DE ID</label>
+        
+        <div class="flex items-center justify-center bg-gray-900/80 border border-cyan-400 rounded-2xl px-4 py-1.5 w-72 mb-8 neon-box">
+            <span class="text-cyan-400 font-extrabold text-lg select-none mr-1">LiveDj</span>
+            <input type="text" id="inputIdNum" placeholder="001" class="bg-transparent border-none text-white font-extrabold text-lg focus:outline-none w-full mb-0 p-0 text-left tracking-wider" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+            <button onclick="validarIngreso()" class="bg-blue-600 hover:bg-blue-500 px-4 py-1.5 rounded-xl text-white font-black text-sm ml-2">OK!</button>
+        </div>
+        
+        <button onclick="navigate('page-registro')" class="bg-gray-300 hover:bg-white text-black font-extrabold px-8 py-3 rounded-2xl text-xs tracking-wider transition">REGISTRARME</button>
+    </div>
+
+    <!-- ==================== PÁGINA 3: REGISTRO ==================== -->
+    <div id="page-registro" class="page justify-start pt-8">
+        <h1 class="text-3xl font-extrabold neon-text mb-0">LIVE</h1>
+        <h2 class="text-xl font-bold neon-blue mb-6">DJ SESSIONS</h2>
+        
+        <div class="w-full max-w-xs relative">
+            <!-- Formulario de Registro -->
+            <div id="formularioRegistro" class="flex flex-col transition-all duration-500">
+                <label class="text-xs font-bold text-gray-300 mb-1 text-left">Nombre / Apodo *</label>
+                <input type="text" id="regNombre" placeholder="Ej: Alex">
+                
+                <label class="text-xs font-bold text-gray-300 mb-1 text-left">Cumpleaños * <span class="text-[10px] text-gray-400">(DD/MM/AAAA)</span></label>
+                <input type="text" id="regFecha" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascarFecha(this)">
+                
+                <label class="text-xs font-bold text-gray-300 mb-1 text-left">Número de Wspp *</label>
+                <input type="tel" id="regTel" placeholder="11 1234 5678">
+                
+                <label class="text-xs font-bold text-gray-300 mb-1 text-left">Preferencia Musical *</label>
+                <input type="text" id="regMusica" placeholder="Cumbia / Techno / Rock">
+                
+                <label class="text-xs font-bold text-gray-300 mb-1 text-left">¿De Dónde Eres? *</label>
+                <input type="text" id="regLugar" placeholder="Ciudad / Barrio">
+                
+                <button onclick="procesarRegistro()" class="bg-blue-600 hover:bg-blue-500 text-white font-extrabold py-3 rounded-xl mt-4 text-sm tracking-wider shadow-lg neon-box">ENVIAR</button>
+                <button onclick="navigate('page-ingreso')" class="text-gray-500 hover:text-white mt-4 text-xs font-semibold">Volver atrás</button>
+            </div>
+
+            <!-- Botón CERRAR en RojoFlotante Post-Registro -->
+            <div id="overlayPostRegistro" class="absolute inset-0 z-10 hidden flex-col items-center justify-center bg-black/50 backdrop-blur-[2px] rounded-2xl">
+              <button onclick="navigate('page-doble-chance')" class="bg-blue-600 hover:bg-blue-500 text-white font-black py-4 px-10 rounded-2xl text-lg tracking-widest shadow-lg border-2 border-blue-400 animate-pop pointer-events-auto">LISTO</button>
+            </div>
+        </div>
+    </div>
+    <!-- ==================== PÁGINA 4: DOBLE CHANCE ==================== -->
+    <div id="page-doble-chance" class="page">
+        <h1 class="text-4xl font-extrabold neon-text mb-1">LIVE</h1>
+        <h2 class="text-2xl font-bold neon-blue mb-8 tracking-widest">DJ SESSIONS</h2>
+
+        <div class="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm text-center shadow-lg">
+            <h3 class="text-2xl font-black text-white mb-4">¡DUPLICÁ TUS CHANCES!</h3>
+
+            <p class="text-gray-300 text-sm leading-relaxed mb-6">
+                Seguinos en Instagram y tenés 2 oportunidades de ganar.
+            </p>
+
+            <button onclick="abrirInstagram()" class="bg-blue-600 hover:bg-blue-500 text-white font-extrabold py-3 px-6 rounded-xl text-sm tracking-wider shadow-lg neon-box">
+                SEGUINOS EN INSTAGRAM
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== PÁGINA 5: ADMIN SORTEOS ==================== -->
+       <div id="page-admin" class="page justify-start pt-6">
+        <div class="border-2 border-white rounded-full px-4 py-1 flex items-center gap-2 mb-6">
+            <span class="font-black text-cyan-400 text-lg">LIVE</span>
+            <span class="font-bold text-white text-sm">Dj</span>
+        </div>
+
+        <div class="flex items-center gap-2 mb-6 w-full max-w-sm">
+            <input type="tel" id="busquedaAdminTel" placeholder="Número de Celular..." class="mb-0 flex-1 text-left px-4">
+            <button onclick="buscarIdPorTel()" class="bg-gray-600 hover:bg-gray-500 font-extrabold px-4 py-2 rounded-xl text-xs tracking-wider">BUSCAR</button>
+        </div>
+        
+        <div class="bg-zinc-900 p-4 rounded-2xl w-full max-w-sm mb-6 border border-zinc-700">
+            <div class="flex justify-between items-center mb-4">
+                <button onclick="realizarSorteo()" class="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded-xl font-extrabold text-xs tracking-wider neon-box">SORTEAR</button>
+                <div id="idGanadorDisplay" class="border border-cyan-400 bg-black text-cyan-400 font-extrabold text-sm w-36 h-9 rounded-xl flex items-center justify-center">---</div>
+            </div>
+            
+            <div class="grid grid-cols-3 gap-2 text-center text-[11px] font-bold text-gray-400 border-b border-zinc-700 pb-1 mb-2">
+                <div>Número ID</div>
+                <div>Nombre/Apodo</div>
+                <div>Nº</div>
+            </div>
+            
+            <div id="listaGanadores" class="h-24 overflow-y-auto text-xs text-center space-y-1 pr-1" style="direction: rtl; text-align: left;">
+                <div style="direction: ltr;" class="text-gray-500 text-center pt-6 italic">Sin sorteos aún</div>
+            </div>
+            
+            <div class="flex justify-end mt-3">
+                <button onclick="restaurarSorteos()" class="bg-zinc-800 border border-zinc-600 hover:bg-zinc-700 px-3 py-1 rounded-lg text-[10px] font-bold text-gray-300">RESTAURAR</button>
+            </div>
+        </div>
+
+        <div class="w-full max-w-sm mb-4">
+            <div class="grid grid-cols-12 gap-1 text-center text-[11px] font-bold text-gray-400 mb-1 px-2">
+                <div class="col-span-4">Número ID</div>
+                <div class="col-span-4">Nombre/Apodo</div>
+                <div class="col-span-2">P/A</div>
+                <div class="col-span-2">Borrar</div>
+            </div>
+            <div id="listaPermanente" class="bg-black border border-zinc-800 rounded-xl p-2 h-36 overflow-y-auto text-xs space-y-1.5">
+                <div class="text-gray-500 text-center pt-10 italic">Cargando base de datos...</div>
+            </div>
+        </div>
+
+        <div class="flex justify-between w-full max-w-sm items-end mt-auto pt-2">
+    <button onclick="navigate('page-qr')" class="bg-white text-black p-2 rounded-xl flex items-center justify-center hover:bg-gray-200 transition">
+        <div id="qrBotonMini" class="w-8 h-8"></div>
+    </button>
+
+    <button onclick="abrirTicketeraAdmin()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2.5 rounded-xl font-extrabold text-xs tracking-wider shadow-lg">
+        🎟️ TICKETERA
+    </button>
+
+    <button onclick="enviarPDFWhatsApp()" class="bg-red-600 hover:bg-red-500 px-4 py-2.5 rounded-xl font-extrabold text-xs tracking-wider shadow-lg">
+        Actualizar PDF
+    </button>
+</div>
+
+</div>
+
+<!-- ==================== ADMIN TICKETERA ==================== -->
+<div id="page-admin-ticketera" class="page justify-start pt-6">
+    <div class="border-2 border-white rounded-full px-4 py-1 flex items-center gap-2 mb-6">
+        <span class="font-black text-cyan-400 text-lg">LIVE</span>
+        <span class="font-bold text-white text-sm">TICKETERA</span>
+    </div>
+
+ <div class="w-full max-w-sm">
+
+    <div class="flex justify-between items-center mb-5">
+    <h2 class="text-2xl font-black text-white">🎟️ TICKETERA</h2>
+
+    <button onclick="crearNuevoEvento()" class="bg-blue-600 hover:bg-blue-500 text-white font-extrabold px-4 py-2 rounded-xl text-xs tracking-wider shadow-lg">
+        + NUEVO EVENTO
+    </button>
+</div>
+
+<button
+    onclick="abrirVentasTicketera()"
+    class="w-full mb-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black px-6 py-3 rounded-xl text-xs tracking-wider shadow-lg">
+    💳 VENTAS
+</button>
+
+<button
+    onclick="navigate('page-control-ticketera')"
+    class="w-full mb-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black px-6 py-3 rounded-xl text-xs tracking-wider shadow-lg">
+    📷 CONTROL DE INGRESO
+</button>
+
+    <div class="bg-zinc-900 border border-zinc-700 rounded-2xl p-4">
+
+        <div class="flex justify-between items-center border-b border-zinc-700 pb-2 mb-2">
+            <span class="text-[10px] font-bold text-gray-400">EVENTOS</span>
+            <span class="text-[10px] font-bold text-gray-500">ESTADO</span>
+        </div>
+
+        <div id="listaEventosTicketera" class="space-y-2">
+
+            <div class="text-gray-500 text-center py-8 text-xs italic">
+                No hay eventos creados
+            </div>
+
+        </div>
+
+    </div>
+<button onclick="navigate('page-ticketera-publica')" class="w-full mb-3 bg-black hover:bg-gray-800 text-white font-bold px-6 py-3 rounded-xl text-xs">
+    👁️ VER CARTELERA PÚBLICA
+</button>
+    <button onclick="navigate('page-admin')" class="w-full mt-5 bg-zinc-800 border border-zinc-600 hover:bg-zinc-700 text-white font-bold px-6 py-3 rounded-xl text-xs">
+        VOLVER AL ADMIN
+    </button>
+
+</div>
+</div>
+<!-- ==================== NUEVO EVENTO TICKETERA ==================== -->
+<div id="page-nuevo-evento-ticketera" class="page justify-start pt-6">
+
+    <div class="border-2 border-white rounded-full px-4 py-1 flex items-center gap-2 mb-5">
+        <span class="font-black text-cyan-400 text-lg">LIVE</span>
+        <span class="font-bold text-white text-sm">TICKETERA</span>
+    </div>
+
+    <div class="w-full max-w-sm">
+
+        <h2 id="tituloFormularioEventoTicketera" class="text-2xl font-black text-white mb-5 text-center">
+            NUEVO EVENTO
+        </h2>
+
+        <div class="bg-zinc-900 border border-zinc-700 rounded-2xl p-5 space-y-4">
+
+            <div>
+                <label class="text-xs font-bold text-gray-300">
+                    Nombre del evento
+                </label>
+                <input type="text" id="ticketEventoNombre" placeholder="Ej: Fiesta Retro 80s" class="w-full mt-1">
+            </div>
+<div>
+    <label class="text-xs font-bold text-gray-300">
+        Flyer del evento
+    </label>
+
+    <input
+        type="file"
+        id="ticketEventoFlyer"
+        accept="image/*"
+        class="w-full mt-1 text-xs text-gray-300"
+    >
+    <div id="ticketEventoFlyerActual" class="text-[10px] text-cyan-400 mt-1 hidden">✓ Ya hay un flyer cargado. Subí uno nuevo solo si querés reemplazarlo.</div>
+</div>
+            <div class="grid grid-cols-2 gap-3">
+
+                <div>
+                    <label class="text-xs font-bold text-gray-300">
+                        Fecha
+                    </label>
+                    <input type="date" id="ticketEventoFecha" class="w-full mt-1">
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold text-gray-300">
+                        Hora
+                    </label>
+                    <input type="time" id="ticketEventoHora" class="w-full mt-1">
+                </div>
+
+            </div>
+
+            <div>
+                <label class="text-xs font-bold text-gray-300">
+                    Lugar
+                </label>
+                <input type="text" id="ticketEventoLugar" placeholder="Ej: Salón Principal" class="w-full mt-1">
+            </div>
+
+            <div>
+                <label class="text-xs font-bold text-gray-300">
+                    Dirección
+                </label>
+                <input type="text" id="ticketEventoDireccion" placeholder="Ej: Av. Siempre Viva 123" class="w-full mt-1">
+            </div>
+
+           <div>
+    <label class="text-xs font-bold text-gray-300">
+        Descripción
+    </label>
+    <textarea id="ticketEventoDescripcion" rows="3" placeholder="Información del evento..." class="w-full mt-1"></textarea>
+</div>
+
+<div class="border-t border-zinc-700 pt-4">
+
+    <div class="text-sm font-black text-white mb-3">
+        DATOS DE COBRO
+    </div>
+
+    <div>
+        <label class="text-xs font-bold text-gray-300">
+            Alias
+        </label>
+        <input
+            type="text"
+            id="ticketEventoAlias"
+            placeholder="Ej: fiesta.mkm"
+            class="w-full mt-1">
+    </div>
+
+    <div class="mt-3">
+        <label class="text-xs font-bold text-gray-300">
+            Titular
+        </label>
+        <input
+            type="text"
+            id="ticketEventoTitular"
+            placeholder="Nombre del titular"
+            class="w-full mt-1">
+    </div>
+
+    <div class="mt-3">
+        <label class="text-xs font-bold text-gray-300">
+            CBU / CVU
+            <span class="text-[10px] text-gray-500">(opcional)</span>
+        </label>
+        <input
+            type="text"
+            id="ticketEventoCbu"
+            placeholder="CBU o CVU"
+            class="w-full mt-1">
+    </div>
+
+    <div class="mt-3">
+        <label class="text-xs font-bold text-gray-300">
+            QR de transferencia
+        </label>
+
+        <input
+            type="file"
+            id="ticketEventoQr"
+            accept="image/*"
+            class="w-full mt-1 text-xs text-gray-300">
+        <div id="ticketEventoQrActual" class="text-[10px] text-cyan-400 mt-1 hidden">✓ Ya hay un QR de transferencia cargado. Subí uno nuevo solo si querés reemplazarlo.</div>
+    </div>
+
+</div>
+
+<div>
+    <label class="text-xs font-bold text-gray-300">
+        Estado del evento
+    </label>
+
+    <select id="ticketEventoEstado" class="w-full mt-1">
+        <option value="publicado">🟢 PUBLICADO</option>
+        <option value="pausado">🟡 PAUSADO</option>
+        <option value="oculto">⚪ OCULTO</option>
+    </select>
+</div>
+            <div class="grid grid-cols-2 gap-3">
+
+                <div>
+                    <label class="text-xs font-bold text-gray-300">
+                        Precio
+                    </label>
+                    <input type="number" id="ticketEventoPrecio" placeholder="$ 0" min="0" class="w-full mt-1">
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold text-gray-300">
+                        Capacidad
+                    </label>
+                    <input type="number" id="ticketEventoCapacidad" placeholder="Ej: 500" min="1" class="w-full mt-1">
+                </div>
+
+            </div>
+
+           <button id="botonGuardarEventoTicketera" onclick="guardarNuevoEvento()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-extrabold py-3 rounded-xl text-sm tracking-wider shadow-lg">
+    GUARDAR EVENTO
+</button>
+
+        </div>
+
+        <button onclick="cancelarEdicionEventoTicketera()" class="w-full mt-4 bg-zinc-800 border border-zinc-600 hover:bg-zinc-700 text-white font-bold px-6 py-3 rounded-xl text-xs">
+            VOLVER A TICKETERA
+        </button>
+
+    </div>
+
+</div>
+<!-- ==================== VENTAS TICKETERA ==================== -->
+<div id="page-ventas-ticketera" class="page justify-start pt-6 bg-zinc-950 text-white">
+
+    <div class="w-full max-w-5xl">
+
+        <div class="text-center mb-7">
+
+            <div class="text-3xl font-black tracking-tight">
+                TICKETERA
+            </div>
+
+            <div class="text-sm text-gray-400 mt-1">
+                Ventas y pagos
+            </div>
+
+        </div>
+
+        <div class="flex justify-between items-center mb-5">
+
+            <h2 class="text-2xl font-black">
+                💳 VENTAS
+            </h2>
+
+        </div>
+
+        <div id="listaVentasTicketera"
+             class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+            <div class="text-gray-500 text-center py-10 col-span-full">
+                No hay eventos disponibles.
+            </div>
+
+        </div>
+
+        <button
+            onclick="navigate('page-admin-ticketera')"
+            class="w-full mt-6 bg-zinc-800 border border-zinc-600 hover:bg-zinc-700 text-white font-bold px-6 py-3 rounded-xl text-xs">
+            VOLVER A TICKETERA
+        </button>
+
+    </div>
+
+</div>
+<!-- ==================== PAGOS POR APROBAR ==================== -->
+<div id="page-pagos-ticketera" class="page justify-start pt-6 bg-zinc-950 text-white">
+
+    <div class="w-full max-w-3xl">
+
+        <div class="text-center mb-7">
+
+            <div class="text-3xl font-black tracking-tight">
+                TICKETERA
+            </div>
+
+            <div class="text-sm text-gray-400 mt-1">
+                Pagos por aprobar
+            </div>
+
+        </div>
+
+        <div class="bg-zinc-900 border border-zinc-700 rounded-2xl p-5 mb-5">
+
+            <div class="text-xs font-bold text-gray-500">
+                EVENTO
+            </div>
+
+            <div id="pagosEventoNombre"
+                 class="text-2xl font-black text-white mt-1">
+                ---
+            </div>
+
+            <div id="pagosEventoFecha"
+                 class="text-sm text-gray-400 mt-2">
+                ---
+            </div>
+
+        </div>
+
+        <div id="listaPagosTicketera"
+             class="space-y-4">
+
+            <div class="text-gray-500 text-center py-10">
+                No hay pagos pendientes de aprobación.
+            </div>
+
+        </div>
+
+        <button
+            onclick="navigate('page-ventas-ticketera')"
+            class="w-full mt-6 bg-zinc-800 border border-zinc-600 hover:bg-zinc-700 text-white font-bold px-6 py-3 rounded-xl text-xs">
+            VOLVER A VENTAS
+        </button>
+
+    </div>
+
+</div>
+
+<!-- ==================== TICKETERA PÚBLICA ==================== -->
+<div id="page-ticketera-publica" class="page justify-start pt-6 bg-white text-gray-900">
+
+    <div class="w-full max-w-5xl">
+
+        <!-- ENCABEZADO -->
+        <div class="text-center mb-8">
+            <div class="text-3xl font-black tracking-tight">
+                TICKETERA
+            </div>
+
+            <div class="text-sm text-gray-500 mt-1">
+                Entradas para tus próximos eventos
+            </div>
+        </div>
+
+        <!-- LISTA DE EVENTOS -->
+        <div id="listaEventosTicketeraPublica"
+             class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+            <div class="text-gray-400 text-center py-10 col-span-full">
+                No hay eventos disponibles
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+<!-- ==================== COMPRA TICKETERA ==================== -->
+<div id="page-compra-ticketera" class="page justify-start pt-6 bg-white text-gray-900">
+
+    <div class="w-full max-w-lg">
+
+        <div class="text-center mb-7">
+            <div class="text-3xl font-black tracking-tight">
+                TICKETERA
+            </div>
+
+            <div class="text-sm text-gray-500 mt-1">
+                Completa tus datos para continuar
+            </div>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
+
+            <div class="mb-6">
+                <div class="text-xs font-bold text-gray-400 uppercase">
+                    Evento
+                </div>
+
+                <div id="compraEventoNombre"
+                     class="text-2xl font-black text-gray-900 mt-1">
+                    ---
+                </div>
+
+                <div id="compraEventoFecha"
+                     class="text-sm text-gray-500 mt-2">
+                    ---
+                </div>
+            </div>
+
+           <div class="border-t border-gray-200 pt-5">
+
+    <label class="text-sm font-bold text-gray-700">
+        Cantidad de entradas
+    </label>
+
+    <input
+        type="number"
+        id="compraCantidad"
+        value="1"
+        min="1"
+        step="1"
+        inputmode="numeric"
+        oninput="actualizarTotalCompra()"
+        class="w-full mt-2 border border-gray-300 rounded-xl px-4 py-3 bg-white"
+    >
+
+</div>
+            <div class="mt-5">
+
+                <label class="text-sm font-bold text-gray-700">
+                    Nombre y apellido
+                </label>
+
+                <input type="text"
+                       id="compraNombre"
+                       placeholder="Ej: Juan Pérez"
+                       class="w-full mt-2">
+
+            </div>
+
+            <div class="mt-5">
+
+                <label class="text-sm font-bold text-gray-700">
+                    DNI
+                </label>
+
+                <input type="text"
+                       id="compraDni"
+                       placeholder="Ej: 30123456"
+                       class="w-full mt-2">
+
+            </div>
+
+            <div class="mt-5">
+
+                <label class="text-sm font-bold text-gray-700">
+                    WhatsApp
+                </label>
+
+                <input type="tel"
+                       id="compraWhatsApp"
+                       placeholder="Ej: 11 1234 5678"
+                       class="w-full mt-2">
+
+            </div>
+
+            <div class="border-t border-gray-200 mt-6 pt-5">
+
+                <div class="flex justify-between items-center">
+
+                    <span class="text-gray-500 font-semibold">
+                        Total
+                    </span>
+
+                    <span id="compraTotal"
+                          class="text-2xl font-black text-gray-900">
+                        $ 0
+                    </span>
+
+                </div>
+
+            </div>
+
+            <button onclick="continuarCompraTicketera()"
+                    class="w-full mt-6 bg-black hover:bg-gray-800 text-white font-black py-4 rounded-xl transition">
+                CONTINUAR
+            </button>
+
+            <button onclick="navigate('page-ticketera-publica')"
+                    class="w-full mt-3 text-gray-500 hover:text-gray-900 font-semibold py-2 text-sm">
+                VOLVER A EVENTOS
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+<!-- ==================== PAGO TICKETERA ==================== -->
+<div id="page-pago-ticketera" class="page justify-start pt-6 bg-white text-gray-900">
+
+    <div class="w-full max-w-lg">
+
+        <div class="text-center mb-7">
+            <div class="text-3xl font-black tracking-tight">
+                TICKETERA
+            </div>
+
+            <div class="text-sm text-gray-500 mt-1">
+                Confirmá tu pago para recibir tus entradas
+            </div>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
+
+            <div class="mb-6">
+
+                <div class="text-xs font-bold text-gray-400 uppercase">
+                    Evento
+                </div>
+
+                <div id="pagoEventoNombre"
+                     class="text-2xl font-black text-gray-900 mt-1">
+                    ---
+                </div>
+
+                <div id="pagoEventoFecha"
+                     class="text-sm text-gray-500 mt-2">
+                    ---
+                </div>
+
+            </div>
+
+            <div class="border-t border-gray-200 pt-5">
+
+                <div class="flex justify-between items-center">
+
+                    <span class="text-gray-500 font-semibold">
+                        Entradas
+                    </span>
+
+                    <span id="pagoCantidad"
+                          class="font-black text-gray-900">
+                        0
+                    </span>
+
+                </div>
+
+                <div class="flex justify-between items-center mt-3">
+
+                    <span class="text-gray-500 font-semibold">
+                        Total a pagar
+                    </span>
+
+                    <span id="pagoTotal"
+                          class="text-2xl font-black text-gray-900">
+                        $ 0
+                    </span>
+
+                </div>
+
+            </div>
+
+            <div class="border-t border-gray-200 mt-6 pt-5">
+
+                <h3 class="text-lg font-black text-gray-900">
+                    Datos para transferir
+                </h3>
+
+                <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 mt-3">
+
+                    <div class="text-xs text-gray-500">
+                        Alias
+                    </div>
+
+                    <div class="flex items-center gap-2 mt-1">
+
+                        <div id="pagoAlias"
+                             class="text-lg font-black text-gray-900 break-all flex-1">
+                            ---
+                        </div>
+
+                        <button
+                            onclick="copiarDatoTicketera('pagoAlias')"
+                            class="shrink-0 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold px-3 py-2 rounded-lg text-xs">
+                            COPIAR
+                        </button>
+
+                    </div>
+
+                    <div class="text-xs text-gray-500 mt-4">
+                        Titular
+                    </div>
+
+                    <div id="pagoTitular"
+                         class="font-bold text-gray-900 mt-1">
+                        ---
+                    </div>
+
+                    <div id="bloquePagoCbu" class="mt-4">
+
+                        <div class="text-xs text-gray-500">
+                            CBU / CVU
+                        </div>
+
+                        <div class="flex items-center gap-2 mt-1">
+
+                            <div id="pagoCbu"
+                                 class="font-bold text-gray-900 break-all flex-1">
+                                ---
+                            </div>
+
+                            <button
+                                onclick="copiarDatoTicketera('pagoCbu')"
+                                class="shrink-0 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold px-3 py-2 rounded-lg text-xs">
+                                COPIAR
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                    <div id="bloquePagoQr" class="mt-5 text-center">
+
+                        <div class="text-xs text-gray-500 mb-2">
+                            QR DE TRANSFERENCIA
+                        </div>
+
+                        <img
+                            id="pagoQr"
+                            src=""
+                            alt="QR de transferencia"
+                            class="max-w-[220px] max-h-[220px] mx-auto rounded-xl object-contain border border-gray-200 bg-white p-2">
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="border-t border-gray-200 mt-6 pt-5">
+
+                <label class="text-sm font-bold text-gray-700">
+                    Comprobante de transferencia
+                </label>
+
+                <input
+                    type="file"
+                    id="ticketComprobante"
+                    accept="image/*,.pdf"
+                    class="w-full mt-2 text-sm"
+                >
+
+                <p class="text-xs text-gray-400 mt-2">
+                    Podés cargar una imagen o PDF del comprobante.
+                </p>
+
+            </div>
+
+            <button
+                id="botonEnviarComprobanteTicketera"
+                onclick="enviarComprobanteTicketera()"
+                class="w-full mt-6 bg-black hover:bg-gray-800 text-white font-black py-4 rounded-xl transition">
+                ENVIAR COMPROBANTE
+            </button>
+
+            <button
+                onclick="navigate('page-compra-ticketera')"
+                class="w-full mt-3 text-gray-500 hover:text-gray-900 font-semibold py-2 text-sm">
+                VOLVER
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- ==================== CONFIRMACIÓN DE COMPRA TICKETERA ==================== -->
+<div id="page-confirmacion-ticketera" class="page justify-start pt-6 bg-white text-gray-900">
+
+    <div class="w-full max-w-lg">
+
+        <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-8 text-center">
+
+            <div class="text-5xl mb-4">✅</div>
+
+            <h2 class="text-2xl font-black text-gray-900">
+                COMPROBANTE RECIBIDO
+            </h2>
+
+            <p class="text-sm text-gray-500 mt-3">
+                Tu compra quedó registrada y está pendiente de aprobación. Te avisaremos por WhatsApp cuando se confirme.
+            </p>
+
+            <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 mt-6">
+                <div class="text-xs text-gray-400 uppercase font-bold">Número de venta</div>
+                <div id="confirmacionNumeroVenta" class="text-2xl font-black text-gray-900 mt-1">---</div>
+            </div>
+
+            <button onclick="navigate('page-ticketera-publica')"
+                class="w-full mt-6 bg-black hover:bg-gray-800 text-white font-black py-4 rounded-xl transition">
+                VOLVER A EVENTOS
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- ==================== MIS ENTRADAS (TICKETERA) ==================== -->
+<div id="page-mis-entradas-ticketera" class="page justify-start pt-6 bg-white text-gray-900">
+
+    <div class="w-full max-w-lg">
+
+        <div class="text-center mb-7">
+            <div class="text-3xl font-black tracking-tight">
+                TUS ENTRADAS
+            </div>
+            <div class="text-sm text-gray-500 mt-1">
+                Presentá el QR de cada entrada en el ingreso
+            </div>
+        </div>
+
+        <div id="listaMisEntradasTicketera" class="space-y-5">
+            <div class="text-gray-400 text-center py-10">
+                Cargando entradas...
+            </div>
+        </div>
+
+        <button onclick="navigate('page-ticketera-publica')"
+            class="w-full mt-6 text-gray-500 hover:text-gray-900 font-semibold py-2 text-sm">
+            VOLVER A EVENTOS
+        </button>
+
+    </div>
+
+</div>
+
+<!-- ==================== CONTROL DE INGRESO (TICKETERA) ==================== -->
+<div id="page-control-ticketera" class="page justify-start pt-6">
+
+    <div class="border-2 border-white rounded-full px-4 py-1 flex items-center gap-2 mb-6">
+        <span class="font-black text-cyan-400 text-lg">LIVE</span>
+        <span class="font-bold text-white text-sm">CONTROL</span>
+    </div>
+
+    <div class="w-full max-w-sm">
+
+        <h2 class="text-xl font-black text-white mb-4 text-center">
+            📷 CONTROL DE INGRESO
+        </h2>
+
+        <div class="bg-zinc-900 border border-zinc-700 rounded-2xl p-3">
+            <div id="lector-qr-ticketera" class="rounded-xl overflow-hidden"></div>
+        </div>
+
+        <div id="resultadoControlTicketera" class="mt-4 hidden"></div>
+
+        <button onclick="iniciarControlIngresoTicketera()" class="w-full mt-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black py-3 rounded-xl text-xs tracking-wider">
+            🔄 ESCANEAR OTRA ENTRADA
+        </button>
+
+        <button onclick="detenerControlIngresoTicketera(); navigate('page-admin-ticketera')" class="w-full mt-3 bg-zinc-800 border border-zinc-600 hover:bg-zinc-700 text-white font-bold px-6 py-3 rounded-xl text-xs">
+            VOLVER A TICKETERA
+        </button>
+
+    </div>
+
+</div>
+
+    <!-- MODAL DE BIENVENIDA -->
+    <div id="modalBienvenida" class="fixed inset-0 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4 z-50">
+        <div class="bg-zinc-900 border-2 border-cyan-400 rounded-3xl p-6 max-w-xs w-full text-center shadow-[0_0_35px_rgba(0,255,255,0.4)] animate-pop">
+            <div class="text-4xl mb-3">🎧</div>
+            <h3 class="text-2xl font-black text-cyan-400 mb-1">¡TE DAMOS LA BIENVENIDA!</h3>
+            <p id="textoNombreModal" class="text-lg text-white font-bold mb-6 capitalize"></p>
+            <button onclick="cerrarModal()" class="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold py-3 rounded-2xl text-xs tracking-wider shadow-md active:scale-95 transition">CERRAR</button>
+        </div>
+    </div>
+
+    <!-- ==================== LÓGICA FIREBASE ==================== -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBUrrzkun9B4dUyl-sXrJOCHaj3iVEjKdM",
+            authDomain: "live---djsessions.firebaseapp.com",
+            projectId: "live---djsessions",
+            storageBucket: "live---djsessions.firebasestorage.app",
+            messagingSenderId: "554017149058",
+            appId: "1:554017149058:web:fd6142cb5b3d9d50c0249b",
+            measurementId: "G-DWCTTV90HQ"
+        };
+
+       firebase.initializeApp(firebaseConfig);
+
+const db = firebase.firestore();
+
+// =====================================================================
+// TICKETERA - ARCHIVOS (Netlify Blobs, NO Firebase Storage)
+// =====================================================================
+
+function leerArchivoComoBase64(archivo) {
+    return new Promise((resolve, reject) => {
+        const lector = new FileReader();
+        lector.onload = () => {
+            const resultado = lector.result || "";
+            const partes = resultado.split(",");
+            resolve(partes[1] || "");
+        };
+        lector.onerror = () => reject(new Error("No se pudo leer el archivo."));
+        lector.readAsDataURL(archivo);
+    });
+}
+
+// Si es una imagen (flyer, QR, foto de comprobante) la redimensiona y comprime
+// en el navegador antes de subirla, para no chocar con el límite de 6 MB
+// que impone Netlify/AWS Lambda a las funciones. Si es un PDF u otra cosa,
+// la devuelve intacta.
+function comprimirImagenSiCorresponde(archivo) {
+    return new Promise((resolve) => {
+        if (!archivo || !archivo.type || !archivo.type.startsWith("image/") || archivo.type === "image/gif") {
+            resolve(archivo);
+            return;
+        }
+
+        const MAX_LADO = 1600;
+        const CALIDAD_JPG = 0.75;
+
+        const lector = new FileReader();
+        lector.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const { width, height } = img;
+
+                if (width <= MAX_LADO && height <= MAX_LADO && archivo.size <= 1.5 * 1024 * 1024) {
+                    resolve(archivo);
+                    return;
+                }
+
+                const escala = Math.min(1, MAX_LADO / Math.max(width, height));
+                const nuevoAncho = Math.round(width * escala);
+                const nuevoAlto = Math.round(height * escala);
+
+                const canvas = document.createElement("canvas");
+                canvas.width = nuevoAncho;
+                canvas.height = nuevoAlto;
+                canvas.getContext("2d").drawImage(img, 0, 0, nuevoAncho, nuevoAlto);
+
+                canvas.toBlob((blob) => {
+                    if (!blob) {
+                        resolve(archivo);
+                        return;
+                    }
+                    const nombre = (archivo.name || "imagen").replace(/\.[^.]+$/, "") + ".jpg";
+                    resolve(new File([blob], nombre, { type: "image/jpeg" }));
+                }, "image/jpeg", CALIDAD_JPG);
+            };
+            img.onerror = () => resolve(archivo);
+            img.src = e.target.result;
+        };
+        lector.onerror = () => resolve(archivo);
+        lector.readAsDataURL(archivo);
+    });
+}
+
+async function subirArchivoTicketera(archivo, tipo) {
+
+    if (!archivo) return "";
+
+    archivo = await comprimirImagenSiCorresponde(archivo);
+
+    const LIMITE_BYTES = 3.5 * 1024 * 1024;
+
+    if (archivo.size > LIMITE_BYTES) {
+        throw new Error("El archivo es demasiado grande (máx. 3,5 MB). Si es un PDF, probá comprimirlo o sacar una captura en vez de escanear.");
+    }
+
+    const base64 = await leerArchivoComoBase64(archivo);
+
+    let respuesta;
+    try {
+        respuesta = await fetch("/.netlify/functions/ticketera-archivos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                data: base64,
+                contentType: archivo.type || "application/octet-stream",
+                nombreOriginal: archivo.name || "",
+                tipo: tipo
+            })
+        });
+    } catch (errorRed) {
+        throw new Error("No se pudo conectar con el servidor de archivos. Revisá tu conexión e intentá de nuevo.");
+    }
+
+    let resultado;
+    try {
+        resultado = await respuesta.json();
+    } catch (e) {
+        throw new Error("El servidor de archivos no respondió correctamente.");
+    }
+
+    if (!resultado || !resultado.ok) {
+        throw new Error((resultado && resultado.error) || "No se pudo subir el archivo.");
+    }
+
+    return resultado.clave;
+}
+
+function urlArchivoTicketera(clave) {
+    if (!clave) return "";
+    return "/.netlify/functions/ticketera-archivos?clave=" + encodeURIComponent(clave);
+}
+
+async function cargarEventosTicketera() {
+
+    try {
+
+        const snapshot = await db
+            .collection("ticketera_eventos")
+            .orderBy("fecha")
+            .get();
+
+        eventosTicketera = snapshot.docs.map(doc => {
+
+            const datos = doc.data();
+
+            return {
+                id: doc.id,
+                ...datos
+            };
+
+        });
+
+        eventosTicketeraCargados = true;
+
+        if (document.getElementById("listaEventosTicketera")) {
+            renderizarEventosTicketera();
+        }
+
+        if (document.getElementById("listaEventosTicketeraPublica")) {
+            renderizarEventosTicketeraPublica();
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Error cargando eventos de Ticketera:",
+            error
+        );
+
+    }
+}
+
+       let invitados = [];
+let sorteosRealizados = [];
+let doblesChance = new Set();
+
+        db.collection("invitados").onSnapshot((snapshot) => {
+            invitados = [];
+            snapshot.forEach((doc) => {
+                invitados.push(doc.data());
+            });
+            invitados.sort((a, b) => a.id.localeCompare(b.id));
+            renderizarAdmin();
+        });
+
+        function mascarFecha(input) {
+            let v = input.value.replace(/\D/g, '').slice(0, 8);
+            if (v.length >= 5) input.value = `${v.slice(0,2)}/${v.slice(2,4)}/${v.slice(4)}`;
+            else if (v.length >= 3) input.value = `${v.slice(0,2)}/${v.slice(2)}`;
+            else input.value = v;
+        }
+
+       function navigate(pageId) {
+    const paginaActual = document.querySelector('.page.active');
+    if (paginaActual && paginaActual.id === 'page-control-ticketera' && pageId !== 'page-control-ticketera') {
+        detenerControlIngresoTicketera();
+    }
+
+    document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+    document.getElementById(pageId).classList.add('active');
+
+    if(pageId === 'page-qr') generarQRCodigo();
+    if(pageId === 'page-admin') renderizarAdmin();
+    if(pageId === 'page-admin-ticketera') renderizarEventosTicketera();
+    if(pageId === 'page-ticketera-publica') renderizarEventosTicketeraPublica();
+    if(pageId === 'page-control-ticketera') iniciarControlIngresoTicketera();
+}
+
+        function generarQRCodigo() {
+            const qrContainer = document.getElementById("qrcode");
+            qrContainer.innerHTML = "";
+            const urlDestino = window.location.href.split('?')[0] + "?go=ingreso";
+
+            new QRCode(qrContainer, {
+                text: urlDestino,
+                width: 180, height: 180,
+                colorDark : "#000000", colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+
+            const qrMini = document.getElementById("qrBotonMini");
+            if(qrMini) {
+                qrMini.innerHTML = "";
+                new QRCode(qrMini, { text: urlDestino, width: 32, height: 32 });
+            }
+        }
+
+        window.onload = async function() {
+
+    await cargarEventosTicketera();
+
+    const urlParams = new URLSearchParams(window.location.search);
+
+    if(urlParams.get('go') === 'ingreso') navigate('page-ingreso');
+
+    else generarQRCodigo();
+
+};
+
+        function generarSiguienteID() {
+            if (invitados.length === 0) return "LiveDj001";
+            let maxNum = 0;
+            invitados.forEach(inv => {
+                let num = parseInt(inv.id.replace("LiveDj", "")) || 0;
+                if (num > maxNum) maxNum = num;
+            });
+            return "LiveDj" + String(maxNum + 1).padStart(3, '0');
+        }
+
+        async function validarIngreso() {
+            const numText = document.getElementById("inputIdNum").value.trim();
+            if(!numText) {
+                alert("Por favor ingresa el número de tu ID.");
+                return;
+            }
+            
+            const idBuscar = "LiveDj" + numText.padStart(3, '0');
+            const usuario = invitados.find(i => i.id.toLowerCase() === idBuscar.toLowerCase());
+
+            if(usuario) {
+                await db.collection("invitados").doc(usuario.id).update({
+                    estado: 'P',
+                    ultimaAsistencia: new Date().getTime()
+                });
+
+                document.getElementById("textoNombreModal").innerText = usuario.nombre;
+                document.getElementById("modalBienvenida").classList.remove("hidden");
+                document.getElementById("modalBienvenida").classList.add("flex");
+            } else {
+                alert("El ID " + idBuscar + " no se encuentra registrado. Por favor presiona REGISTRARME.");
+            }
+        }
+
+        function cerrarModal() {
+            document.getElementById("modalBienvenida").classList.add("hidden");
+            document.getElementById("modalBienvenida").classList.remove("flex");
+            document.getElementById("inputIdNum").value = "";
+            navigate('page-qr');
+        }
+
+        async function procesarRegistro() {
+            const nombre = document.getElementById("regNombre").value.trim();
+            const fecha = document.getElementById("regFecha").value.trim();
+            let telOriginal = document.getElementById("regTel").value.trim();
+            const musica = document.getElementById("regMusica").value.trim();
+            const lugar = document.getElementById("regLugar").value.trim();
+
+            if(!nombre || !fecha || !telOriginal || !musica || !lugar) {
+                alert("Por favor completa todos los campos obligatorios.");
+                return;
+            }
+
+            let telLimpio = telOriginal.replace(/[^0-9]/g, '');
+
+            if (!telLimpio.startsWith("54")) {
+                if (telLimpio.startsWith("15")) {
+                    telLimpio = "54911" + telLimpio.slice(2);
+                } else if (telLimpio.startsWith("11")) {
+                    telLimpio = "549" + telLimpio;
+                } else {
+                    telLimpio = "549" + telLimpio;
+                }
+            }
+// -------------------------------------------------------------
+            // VERIFICACIÓN DE CELULAR EXISTENTE EN LA BASE DE DATOS
+            // -------------------------------------------------------------
+            const telIngresadoNumeros = telOriginal.replace(/[^0-9]/g, '');
+            
+            const usuarioExistente = invitados.find(inv => {
+                const invTelNumeros = (inv.tel || '').replace(/[^0-9]/g, '');
+                if (!invTelNumeros) return false;
+                
+                // Coincidencia exacta o coincidencia por últimos 8 dígitos (ignora prefijos 15/11/54)
+                if (invTelNumeros === telIngresadoNumeros) return true;
+                if (invTelNumeros.length >= 8 && telIngresadoNumeros.length >= 8 && invTelNumeros.slice(-8) === telIngresadoNumeros.slice(-8)) return true;
+                return false;
+            });
+
+            if (usuarioExistente) {
+                alert(`¡EL USUARIO YA EXISTE!\n\nEl celular ${telOriginal} ya se encuentra registrado a nombre de "${usuarioExistente.nombre}" con el ID: ${usuarioExistente.id}.\n\nSerás redirigido para dar tu PRESENTE con este ID.`);
+                
+                // Coloca el número de ID automáticamente en la pantalla de ingreso
+                const numSolo = usuarioExistente.id.replace("LiveDj", "");
+                const inputIngreso = document.getElementById("inputIdNum");
+                if (inputIngreso) {
+                    inputIngreso.value = numSolo;
+                }
+                
+                // Redirige a la pantalla de ingreso
+                navigate('page-ingreso');
+                return; // Cancela el nuevo registro
+            }
+            // -------------------------------------------------------------
+            const nuevoId = generarSiguienteID();
+
+            const nuevoInvitado = {
+                id: nuevoId,
+                nombre: nombre,
+                fecha: fecha,
+                tel: telOriginal,
+                musica: musica,
+                lugar: lugar,
+                estado: 'P',
+                ultimaAsistencia: new Date().getTime()
+            };
+
+            try {
+                await db.collection("invitados").doc(nuevoId).set(nuevoInvitado);
+            } catch (err) {
+                console.error("Error al guardar en Firebase:", err);
+            }
+
+            // Bloquear formulario y mostrar botón CERRAR en rojo
+            const formContainer = document.getElementById("formularioRegistro");
+            formContainer.classList.add("opacity-30", "pointer-events-none", "grayscale");
+            
+            const overlayCerrar = document.getElementById("overlayPostRegistro");
+            overlayCerrar.classList.remove("hidden");
+            overlayCerrar.classList.add("flex");
+
+            // Redirigir a WhatsApp
+            const mensaje = `¡Te damos la bienvenida ${nombre}! Tu Id para Sorteos y Promociones es ${nuevoId}. Guardalo!`;
+            const urlWspp = `https://api.whatsapp.com/send?phone=${telLimpio}&text=${encodeURIComponent(mensaje)}`;
+            window.location.href = urlWspp;
+        }
+function abrirTicketeraAdmin() {
+
+    const clave = prompt("🔐 ACCESO TICKETERA\n\nIngresa la contraseña:");
+
+    if (clave === ".mkm**") {
+        navigate("page-admin-ticketera");
+    } else if (clave !== null) {
+        alert("Contraseña incorrecta.");
+    }
+}
+
+function crearNuevoEvento() {
+    limpiarFormularioEventoTicketera();
+    navigate("page-nuevo-evento-ticketera");
+}
+
+function limpiarFormularioEventoTicketera() {
+
+    eventoTicketeraEditando = null;
+
+    document.getElementById("ticketEventoNombre").value = "";
+    document.getElementById("ticketEventoFlyer").value = "";
+    document.getElementById("ticketEventoFecha").value = "";
+    document.getElementById("ticketEventoHora").value = "";
+    document.getElementById("ticketEventoLugar").value = "";
+    document.getElementById("ticketEventoDireccion").value = "";
+    document.getElementById("ticketEventoDescripcion").value = "";
+    document.getElementById("ticketEventoAlias").value = "";
+    document.getElementById("ticketEventoTitular").value = "";
+    document.getElementById("ticketEventoCbu").value = "";
+    document.getElementById("ticketEventoQr").value = "";
+    document.getElementById("ticketEventoPrecio").value = "";
+    document.getElementById("ticketEventoCapacidad").value = "";
+    document.getElementById("ticketEventoEstado").value = "publicado";
+
+    document.getElementById("ticketEventoFlyerActual").classList.add("hidden");
+    document.getElementById("ticketEventoQrActual").classList.add("hidden");
+
+    document.getElementById("tituloFormularioEventoTicketera").innerText = "NUEVO EVENTO";
+    document.getElementById("botonGuardarEventoTicketera").innerText = "GUARDAR EVENTO";
+}
+
+function cancelarEdicionEventoTicketera() {
+    limpiarFormularioEventoTicketera();
+    navigate("page-admin-ticketera");
+}
+
+function abrirVentasTicketera() {
+    navigate("page-ventas-ticketera");
+    renderizarVentasTicketera();
+}
+
+function verPagosEventoTicketera(id) {
+
+    const evento = eventosTicketera.find(e => e.id === id);
+
+    if (!evento) return;
+
+    eventoTicketeraPagosActual = id;
+
+    document.getElementById("pagosEventoNombre").innerText =
+        evento.nombre;
+
+    document.getElementById("pagosEventoFecha").innerText =
+        evento.fecha +
+        " · " +
+        evento.hora +
+        " · " +
+        evento.lugar;
+
+    renderizarPagosTicketera(id);
+
+    navigate("page-pagos-ticketera");
+}
+
+function renderizarPagosTicketera(eventoId) {
+
+    const lista = document.getElementById("listaPagosTicketera");
+
+    if (!lista) return;
+
+    const ventasEvento = ventasTicketera
+        .filter(v => v.eventoId === eventoId)
+        .sort((a, b) => (b.fechaVenta || "").localeCompare(a.fechaVenta || ""));
+
+    if (ventasEvento.length === 0) {
+        lista.innerHTML = `
+            <div class="text-gray-500 text-center py-10">
+                Todavía no hay ventas para este evento.
+            </div>
+        `;
+        return;
+    }
+
+    const etiquetaEstado = {
+        pendiente: `<span class="text-[10px] font-black px-2 py-1 rounded-lg bg-yellow-500 text-black">PENDIENTE</span>`,
+        aprobada: `<span class="text-[10px] font-black px-2 py-1 rounded-lg bg-green-600 text-white">APROBADA</span>`,
+        rechazada: `<span class="text-[10px] font-black px-2 py-1 rounded-lg bg-red-600 text-white">RECHAZADA</span>`,
+        cancelada: `<span class="text-[10px] font-black px-2 py-1 rounded-lg bg-gray-600 text-white">CANCELADA</span>`
+    };
+
+    lista.innerHTML = ventasEvento.map(venta => `
+        <div class="bg-zinc-900 border border-zinc-700 rounded-2xl p-4">
+
+            <div class="flex justify-between items-start">
+                <div>
+                    <div class="text-white font-black">${venta.numeroVenta || ""}</div>
+                    <div class="text-[10px] text-gray-500 mt-0.5">${venta.fechaVenta ? new Date(venta.fechaVenta).toLocaleString("es-AR") : ""}</div>
+                </div>
+                ${etiquetaEstado[venta.estado] || ""}
+            </div>
+
+            <div class="grid grid-cols-2 gap-x-3 gap-y-1 mt-3 text-xs">
+                <div class="text-gray-400">Comprador</div>
+                <div class="text-white font-bold text-right truncate">${venta.nombre || ""}</div>
+
+                <div class="text-gray-400">DNI</div>
+                <div class="text-white text-right">${venta.dni || ""}</div>
+
+                <div class="text-gray-400">WhatsApp</div>
+                <div class="text-white text-right">${venta.whatsapp || ""}</div>
+
+                <div class="text-gray-400">Cantidad</div>
+                <div class="text-white text-right">${venta.cantidad || 0}</div>
+
+                <div class="text-gray-400">Total</div>
+                <div class="text-white font-black text-right">$ ${Number(venta.total || 0).toLocaleString("es-AR")}</div>
+            </div>
+
+            ${
+                venta.comprobanteClave
+                ? `<a href="${urlArchivoTicketera(venta.comprobanteClave)}" target="_blank" rel="noopener"
+                    class="block text-center mt-3 bg-zinc-800 border border-zinc-600 hover:bg-zinc-700 text-white font-bold py-2 rounded-lg text-[11px]">
+                    📎 VER COMPROBANTE
+                   </a>`
+                : ""
+            }
+
+            ${
+                venta.estado === "pendiente"
+                ? `
+                <div class="grid grid-cols-2 gap-2 mt-3">
+                    <button onclick="aprobarVentaTicketera('${venta.id}')"
+                        class="bg-green-600 hover:bg-green-500 text-white font-black py-2 rounded-lg text-xs">
+                        ✅ APROBAR
+                    </button>
+                    <button onclick="rechazarVentaTicketera('${venta.id}')"
+                        class="bg-red-600 hover:bg-red-500 text-white font-black py-2 rounded-lg text-xs">
+                        ❌ RECHAZAR
+                    </button>
+                </div>
+                `
+                : ""
+            }
+
+            ${
+                venta.estado === "aprobada"
+                ? `
+                <div class="grid grid-cols-2 gap-2 mt-3">
+                    <button onclick="verEntradasVentaTicketera('${venta.id}')"
+                        class="bg-blue-600 hover:bg-blue-500 text-white font-black py-2 rounded-lg text-xs">
+                        🎟️ VER ENTRADAS
+                    </button>
+                    <button onclick="compartirEntradasWhatsApp('${venta.id}')"
+                        class="bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2 rounded-lg text-xs">
+                        📲 ENVIAR
+                    </button>
+                </div>
+                `
+                : ""
+            }
+
+        </div>
+    `).join("");
+}
+
+async function enviarComprobanteTicketera() {
+
+    if (!eventoTicketeraComprando) return;
+
+    const archivo =
+        document.getElementById("ticketComprobante").files[0];
+
+    if (!archivo) {
+        alert("Adjuntá el comprobante de transferencia.");
+        return;
+    }
+
+    const cantidad = Number(
+        document.getElementById("compraCantidad").value
+    );
+
+    const nombre =
+        document.getElementById("compraNombre").value.trim();
+
+    const dni =
+        document.getElementById("compraDni").value.trim();
+
+    const whatsapp =
+        document.getElementById("compraWhatsApp").value.trim();
+
+    const precio =
+        Number(eventoTicketeraComprando.precio);
+
+    const total =
+        cantidad * precio;
+
+    const disponiblesActuales = calcularDisponiblesEvento(eventoTicketeraComprando.id, eventoTicketeraComprando.capacidad);
+
+    if (cantidad > disponiblesActuales) {
+        alert(
+            "⚠️ Solo quedan " +
+            disponiblesActuales +
+            " entradas disponibles en este momento."
+        );
+        return;
+    }
+
+    const botonEnviar = document.getElementById("botonEnviarComprobanteTicketera");
+    if (botonEnviar) {
+        botonEnviar.disabled = true;
+        botonEnviar.innerText = "ENVIANDO...";
+    }
+
+    try {
+
+        const comprobanteClave = await subirArchivoTicketera(archivo, "comprobantes");
+
+        const numeroVenta = generarSiguienteNumeroVenta();
+
+        const venta = {
+
+            numeroVenta,
+
+            eventoId: eventoTicketeraComprando.id,
+
+            eventoNombre: eventoTicketeraComprando.nombre,
+
+            fechaEvento: eventoTicketeraComprando.fecha,
+
+            horaEvento: eventoTicketeraComprando.hora,
+
+            lugarEvento: eventoTicketeraComprando.lugar,
+
+            nombre,
+
+            dni,
+
+            whatsapp,
+
+            cantidad,
+
+            precio,
+
+            total,
+
+            comprobanteClave,
+
+            estado: "pendiente",
+
+            fechaVenta: new Date().toISOString()
+
+        };
+
+        const docRef = await db.collection("ticketera_ventas").add(venta);
+
+        document.getElementById("confirmacionNumeroVenta").innerText = numeroVenta;
+
+        document.getElementById("ticketComprobante").value = "";
+
+        eventoTicketeraComprando = null;
+
+        navigate("page-confirmacion-ticketera");
+
+    } catch (error) {
+
+        console.error("Error enviando comprobante de Ticketera:", error);
+        alert("No se pudo enviar el comprobante: " + error.message);
+
+    } finally {
+
+        if (botonEnviar) {
+            botonEnviar.disabled = false;
+            botonEnviar.innerText = "ENVIAR COMPROBANTE";
+        }
+    }
+}
+
+function renderizarVentasTicketera() {
+
+    const lista = document.getElementById("listaVentasTicketera");
+
+    if (!lista) return;
+
+    if (eventosTicketera.length === 0) {
+
+        lista.innerHTML = `
+            <div class="text-gray-500 text-center py-10 col-span-full">
+                No hay eventos disponibles.
+            </div>
+        `;
+
+        return;
+    }
+
+    lista.innerHTML = eventosTicketera.map(evento => {
+
+        const ventasEvento = ventasTicketera.filter(
+            venta => venta.eventoId === evento.id
+        );
+
+        const ventasPendientes = ventasEvento.filter(
+            venta => venta.estado === "pendiente"
+        );
+
+        const ventasAprobadas = ventasEvento.filter(
+            venta => venta.estado === "aprobada"
+        );
+
+        const entradasPendientes = ventasPendientes.reduce(
+            (total, venta) => total + Number(venta.cantidad),
+            0
+        );
+
+        const entradasConfirmadas = ventasAprobadas.reduce(
+            (total, venta) => total + Number(venta.cantidad),
+            0
+        );
+
+        return `
+            <div class="bg-zinc-900 border border-zinc-700 rounded-2xl overflow-hidden">
+
+                <div class="w-full h-44 bg-zinc-800 flex items-center justify-center">
+
+                   ${
+    evento.flyerClave
+    ? `<img
+        src="${urlArchivoTicketera(evento.flyerClave)}"
+        class="w-full h-full object-cover"
+        alt="${evento.nombre}">`
+    : `<span class="text-gray-400 text-sm">
+            Sin flyer
+       </span>`
+}
+
+                </div>
+
+                <div class="p-4">
+
+                    <div class="text-lg font-black text-white">
+                        ${evento.nombre}
+                    </div>
+
+                    <div class="text-xs text-gray-400 mt-2">
+                        📅 ${evento.fecha} · ${evento.hora}
+                    </div>
+
+                    <div class="text-xs text-gray-400 mt-1">
+                        📍 ${evento.lugar}
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 mt-5">
+
+                        <div class="bg-zinc-800 rounded-xl p-3 text-center">
+
+                            <div class="text-2xl font-black text-white">
+                                ${entradasConfirmadas}
+                            </div>
+
+                            <div class="text-[9px] font-bold text-gray-400 mt-1">
+                                CONFIRMADAS
+                            </div>
+
+                        </div>
+
+                        <div class="bg-zinc-800 rounded-xl p-3 text-center">
+
+                            <div class="text-2xl font-black text-yellow-400">
+                                ${entradasPendientes}
+                            </div>
+
+                            <div class="text-[9px] font-bold text-gray-400 mt-1">
+                                POR APROBAR
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <button
+                        onclick="verPagosEventoTicketera('${evento.id}')"
+                        class="w-full mt-4 bg-blue-600 hover:bg-blue-500 text-white font-black py-3 rounded-xl text-xs">
+                        VER PAGOS Y VENTAS
+                    </button>
+
+                </div>
+
+            </div>
+        `;
+
+    }).join("");
+}
+function copiarDatoTicketera(idElemento) {
+
+    const elemento = document.getElementById(idElemento);
+
+    if (!elemento) return;
+
+    const texto = elemento.innerText.trim();
+
+    if (!texto || texto === "---") {
+        return;
+    }
+
+    navigator.clipboard.writeText(texto)
+        .then(() => {
+            alert("Dato copiado.");
+        })
+        .catch(() => {
+            alert("No se pudo copiar el dato.");
+        });
+}
+
+// =====================================================================
+// TICKETERA - APROBACIÓN DE VENTAS Y GENERACIÓN DE ENTRADAS
+// =====================================================================
+
+function generarCodigoEntradaTicketera(evento, numeroEntrada) {
+
+    const fechaCompacta = (evento.fecha || "").replace(/-/g, "") || "00000000";
+    const numeroPad = String(numeroEntrada).padStart(6, "0");
+    const azar = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+    return `TKT-${fechaCompacta}-${numeroPad}-${azar}`;
+}
+
+async function aprobarVentaTicketera(ventaId) {
+
+    const venta = ventasTicketera.find(v => v.id === ventaId);
+
+    if (!venta) return;
+
+    if (venta.estado !== "pendiente") {
+        alert("Esta venta ya fue procesada.");
+        return;
+    }
+
+    if (!confirm(`¿Aprobar la venta ${venta.numeroVenta} y generar ${venta.cantidad} entrada(s)?`)) {
+        return;
+    }
+
+    const evento = eventosTicketera.find(e => e.id === venta.eventoId) || {
+        fecha: venta.fechaEvento,
+        hora: venta.horaEvento,
+        lugar: venta.lugarEvento,
+        nombre: venta.eventoNombre
+    };
+
+    try {
+
+        await db.collection("ticketera_ventas").doc(venta.id).update({
+            estado: "aprobada",
+            fechaAprobacion: new Date().toISOString()
+        });
+
+        const yaGeneradas = entradasTicketera.filter(e => e.eventoId === venta.eventoId).length;
+        const cantidad = Number(venta.cantidad) || 0;
+
+        const lote = db.batch();
+
+        for (let i = 0; i < cantidad; i++) {
+
+            const numeroEntrada = yaGeneradas + i + 1;
+            const codigo = generarCodigoEntradaTicketera(evento, numeroEntrada);
+
+            const refEntrada = db.collection("ticketera_entradas").doc();
+
+            lote.set(refEntrada, {
+                ventaId: venta.id,
+                eventoId: venta.eventoId,
+                eventoNombre: venta.eventoNombre,
+                fechaEvento: venta.fechaEvento,
+                horaEvento: venta.horaEvento,
+                lugarEvento: venta.lugarEvento || evento.lugar || "",
+                compradorNombre: venta.nombre,
+                compradorDni: venta.dni,
+                numeroEntrada,
+                codigo,
+                estado: "valida",
+                fechaGeneracion: new Date().toISOString(),
+                fechaUso: null
+            });
+        }
+
+        await lote.commit();
+
+        alert(`Venta aprobada. Se generaron ${cantidad} entrada(s) con QR únicos.`);
+
+        renderizarPagosTicketera(venta.eventoId);
+
+    } catch (error) {
+        console.error("Error aprobando venta de Ticketera:", error);
+        alert("No se pudo aprobar la venta: " + error.message);
+    }
+}
+
+async function rechazarVentaTicketera(ventaId) {
+
+    const venta = ventasTicketera.find(v => v.id === ventaId);
+
+    if (!venta) return;
+
+    if (venta.estado !== "pendiente") {
+        alert("Esta venta ya fue procesada.");
+        return;
+    }
+
+    if (!confirm(`¿Rechazar la venta ${venta.numeroVenta}? Esta acción liberará la capacidad ocupada.`)) {
+        return;
+    }
+
+    try {
+        await db.collection("ticketera_ventas").doc(venta.id).update({
+            estado: "rechazada",
+            fechaRechazo: new Date().toISOString()
+        });
+
+        renderizarPagosTicketera(venta.eventoId);
+
+    } catch (error) {
+        console.error("Error rechazando venta de Ticketera:", error);
+        alert("No se pudo rechazar la venta: " + error.message);
+    }
+}
+
+function verEntradasVentaTicketera(ventaId) {
+    renderizarMisEntradas(ventaId);
+    navigate("page-mis-entradas-ticketera");
+}
+
+function compartirEntradasWhatsApp(ventaId) {
+
+    const venta = ventasTicketera.find(v => v.id === ventaId);
+
+    if (!venta) return;
+
+    const url = window.location.href.split("?")[0] + "?venta=" + encodeURIComponent(ventaId);
+
+    const mensaje =
+        `¡Hola ${venta.nombre}! Tu compra para ${venta.eventoNombre} fue aprobada. ` +
+        `Accedé a tus entradas con QR desde este link: ${url}`;
+
+    let telLimpio = (venta.whatsapp || "").replace(/[^0-9]/g, "");
+
+    if (telLimpio && !telLimpio.startsWith("54")) {
+        telLimpio = "549" + telLimpio.replace(/^0/, "").replace(/^15/, "");
+    }
+
+    const urlWspp = telLimpio
+        ? `https://api.whatsapp.com/send?phone=${telLimpio}&text=${encodeURIComponent(mensaje)}`
+        : `https://api.whatsapp.com/send?text=${encodeURIComponent(mensaje)}`;
+
+    window.open(urlWspp, "_blank");
+}
+
+function renderizarMisEntradas(ventaId) {
+
+    const contenedor = document.getElementById("listaMisEntradasTicketera");
+
+    if (!contenedor) return;
+
+    const entradas = entradasTicketera.filter(e => e.ventaId === ventaId);
+
+    if (entradas.length === 0) {
+        contenedor.innerHTML = `
+            <div class="text-gray-400 text-center py-10">
+                Todavía no hay entradas generadas para esta compra.<br>
+                <span class="text-xs">Las entradas aparecen apenas el pago es aprobado.</span>
+            </div>
+        `;
+        return;
+    }
+
+    contenedor.innerHTML = entradas.map(entrada => `
+        <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 text-center">
+
+            <div class="text-lg font-black text-gray-900">${entrada.eventoNombre}</div>
+
+            <div class="text-sm text-gray-500 mt-1">
+                📅 ${entrada.fechaEvento} · 🕐 ${entrada.horaEvento}
+            </div>
+
+            <div class="text-sm text-gray-500 mt-0.5">
+                📍 ${entrada.lugarEvento || ""}
+            </div>
+
+            <div class="text-xs text-gray-400 mt-3">${entrada.compradorNombre}</div>
+
+            <div class="text-xs font-bold text-gray-500 mt-3">ENTRADA Nº</div>
+            <div class="text-2xl font-black text-gray-900">${String(entrada.numeroEntrada).padStart(6, "0")}</div>
+
+            <div id="qrEntrada-${entrada.id}" class="flex items-center justify-center my-4"></div>
+
+            ${
+                entrada.estado === "usada"
+                ? `<div class="bg-red-100 text-red-700 font-black text-xs py-2 rounded-lg">🔴 ENTRADA YA UTILIZADA</div>`
+                : `<div class="bg-green-100 text-green-700 font-black text-xs py-2 rounded-lg">🟢 ENTRADA VÁLIDA</div>`
+            }
+
+        </div>
+    `).join("");
+
+    entradas.forEach(entrada => {
+        const contenedorQr = document.getElementById(`qrEntrada-${entrada.id}`);
+        if (contenedorQr && window.QRCode) {
+            contenedorQr.innerHTML = "";
+            new QRCode(contenedorQr, {
+                text: entrada.codigo,
+                width: 180,
+                height: 180,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+    });
+}
+
+// =====================================================================
+// TICKETERA - CONTROL DE INGRESO (ESCANEO DE QR)
+// =====================================================================
+
+let html5QrcodeScannerTicketera = null;
+let escaneoTicketeraActivo = false;
+let escaneoTicketeraProcesando = false;
+
+function iniciarControlIngresoTicketera() {
+
+    const resultado = document.getElementById("resultadoControlTicketera");
+    if (resultado) {
+        resultado.classList.add("hidden");
+        resultado.innerHTML = "";
+    }
+
+    escaneoTicketeraProcesando = false;
+
+    detenerControlIngresoTicketera();
+
+    const contenedor = document.getElementById("lector-qr-ticketera");
+    if (contenedor) contenedor.innerHTML = "";
+
+    if (typeof Html5QrcodeScanner === "undefined") {
+        if (resultado) {
+            resultado.classList.remove("hidden");
+            resultado.innerHTML = `<div class="bg-yellow-600 text-white font-bold text-center py-3 rounded-xl text-xs">No se pudo cargar la cámara. Verificá tu conexión a internet.</div>`;
+        }
+        return;
+    }
+
+    html5QrcodeScannerTicketera = new Html5QrcodeScanner(
+        "lector-qr-ticketera",
+        { fps: 10, qrbox: 230 },
+        false
+    );
+
+    html5QrcodeScannerTicketera.render(
+        onEscaneoExitosoTicketera,
+        () => {}
+    );
+
+    escaneoTicketeraActivo = true;
+}
+
+function detenerControlIngresoTicketera() {
+
+    if (html5QrcodeScannerTicketera && escaneoTicketeraActivo) {
+        try {
+            html5QrcodeScannerTicketera.clear();
+        } catch (e) {
+            // La cámara ya pudo haberse liberado
+        }
+    }
+
+    escaneoTicketeraActivo = false;
+}
+
+function onEscaneoExitosoTicketera(codigoDecodificado) {
+
+    if (escaneoTicketeraProcesando) return;
+    escaneoTicketeraProcesando = true;
+
+    detenerControlIngresoTicketera();
+    validarEntradaTicketera(codigoDecodificado);
+}
+
+function renderResultadoControlTicketera(tipo, entrada) {
+
+    if (tipo === "valida") {
+        return `
+            <div class="bg-green-600 rounded-2xl p-5 text-white text-center">
+                <div class="text-3xl mb-2">🟢</div>
+                <div class="font-black text-lg mb-2">ENTRADA VÁLIDA</div>
+                <div class="text-sm">Nombre: <b>${entrada.compradorNombre}</b></div>
+                <div class="text-sm">Evento: <b>${entrada.eventoNombre}</b></div>
+                <div class="text-sm">Entrada: <b>${String(entrada.numeroEntrada).padStart(6, "0")}</b></div>
+            </div>
+        `;
+    }
+
+    if (tipo === "usada") {
+        return `
+            <div class="bg-red-600 rounded-2xl p-5 text-white text-center">
+                <div class="text-3xl mb-2">🔴</div>
+                <div class="font-black text-lg mb-2">ENTRADA YA UTILIZADA</div>
+                <div class="text-sm">Nombre: <b>${entrada.compradorNombre}</b></div>
+                <div class="text-sm">Evento: <b>${entrada.eventoNombre}</b></div>
+                <div class="text-sm">Entrada: <b>${String(entrada.numeroEntrada).padStart(6, "0")}</b></div>
+            </div>
+        `;
+    }
+
+    if (tipo === "error") {
+        return `
+            <div class="bg-yellow-600 rounded-2xl p-5 text-white text-center">
+                <div class="font-black">⚠️ Error validando la entrada. Intentá nuevamente.</div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="bg-red-600 rounded-2xl p-5 text-white text-center">
+            <div class="text-3xl mb-2">🔴</div>
+            <div class="font-black text-lg">ENTRADA NO VÁLIDA</div>
+        </div>
+    `;
+}
+
+async function validarEntradaTicketera(codigo) {
+
+    const resultado = document.getElementById("resultadoControlTicketera");
+    if (!resultado) return;
+
+    resultado.classList.remove("hidden");
+
+    const entrada = entradasTicketera.find(e => e.codigo === codigo);
+
+    if (!entrada) {
+        resultado.innerHTML = renderResultadoControlTicketera("invalida");
+        escaneoTicketeraProcesando = false;
+        return;
+    }
+
+    if (entrada.estado === "usada") {
+        resultado.innerHTML = renderResultadoControlTicketera("usada", entrada);
+        escaneoTicketeraProcesando = false;
+        return;
+    }
+
+    try {
+        await db.collection("ticketera_entradas").doc(entrada.id).update({
+            estado: "usada",
+            fechaUso: new Date().toISOString()
+        });
+
+        resultado.innerHTML = renderResultadoControlTicketera("valida", entrada);
+
+    } catch (error) {
+        console.error("Error validando entrada de Ticketera:", error);
+        resultado.innerHTML = renderResultadoControlTicketera("error");
+    }
+
+    escaneoTicketeraProcesando = false;
+}
+
+let eventosTicketera = [];
+let eventoTicketeraEditando = null;
+let eventoTicketeraComprando = null;
+
+let ventasTicketera = [];
+let entradasTicketera = [];
+let eventoTicketeraPagosActual = null;
+
+let eventosTicketeraCargados = false;
+let ventasTicketeraCargadas = false;
+let entradasTicketeraCargadas = false;
+
+const ventaDesdeURL = new URLSearchParams(window.location.search).get('venta');
+let yaNavegoAVentaDesdeURL = false;
+
+db.collection("ticketera_ventas").onSnapshot((snapshot) => {
+
+    ventasTicketera = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    ventasTicketera.sort((a, b) => (b.fechaVenta || "").localeCompare(a.fechaVenta || ""));
+    ventasTicketeraCargadas = true;
+
+    if (document.getElementById("listaVentasTicketera")) renderizarVentasTicketera();
+    if (document.getElementById("listaPagosTicketera") && eventoTicketeraPagosActual) renderizarPagosTicketera(eventoTicketeraPagosActual);
+
+}, (error) => {
+    console.error("Error cargando ventas de Ticketera:", error);
+});
+
+db.collection("ticketera_entradas").onSnapshot((snapshot) => {
+
+    entradasTicketera = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    entradasTicketeraCargadas = true;
+
+    if (ventaDesdeURL) {
+        renderizarMisEntradas(ventaDesdeURL);
+        if (!yaNavegoAVentaDesdeURL) {
+            yaNavegoAVentaDesdeURL = true;
+            navigate('page-mis-entradas-ticketera');
+        }
+    }
+
+}, (error) => {
+    console.error("Error cargando entradas de Ticketera:", error);
+});
+
+function generarSiguienteNumeroVenta() {
+    return "V-" + String(ventasTicketera.length + 1).padStart(6, "0");
+}
+
+function calcularDisponiblesEvento(eventoId, capacidad) {
+
+    const ocupadas = ventasTicketera
+        .filter(v => v.eventoId === eventoId && (v.estado === "pendiente" || v.estado === "aprobada"))
+        .reduce((total, v) => total + Number(v.cantidad || 0), 0);
+
+    const disponibles = Number(capacidad || 0) - ocupadas;
+
+    return disponibles > 0 ? disponibles : 0;
+}
+
+function comprarEntradaTicketera(id) {
+
+    const evento = eventosTicketera.find(e => e.id === id);
+
+    if (!evento) return;
+
+    if (evento.estado === "pausado") {
+        alert("La venta de este evento está pausada por el momento.");
+        return;
+    }
+
+    const disponibles = calcularDisponiblesEvento(evento.id, evento.capacidad);
+
+    if (disponibles <= 0) {
+        alert("⚠️ No quedan entradas disponibles para este evento en este momento.");
+        return;
+    }
+
+    eventoTicketeraComprando = evento;
+    eventoTicketeraComprando.disponibles = disponibles;
+
+    document.getElementById("compraEventoNombre").innerText = evento.nombre;
+    document.getElementById("compraEventoFecha").innerText =
+        evento.fecha + " · " + evento.hora + " · " + evento.lugar;
+
+    const campoCantidad = document.getElementById("compraCantidad");
+    campoCantidad.min = "1";
+    campoCantidad.max = String(disponibles);
+    campoCantidad.value = "1";
+
+    document.getElementById("compraNombre").value = "";
+    document.getElementById("compraDni").value = "";
+    document.getElementById("compraWhatsApp").value = "";
+
+    document.getElementById("compraTotal").innerText =
+        "$ " + Number(evento.precio).toLocaleString("es-AR");
+
+    navigate("page-compra-ticketera");
+}
+function actualizarTotalCompra() {
+
+    if (!eventoTicketeraComprando) return;
+
+    const campoCantidad = document.getElementById("compraCantidad");
+
+    const cantidad = Number(campoCantidad.value);
+    const disponibles = Number(eventoTicketeraComprando.disponibles);
+
+    if (cantidad > disponibles) {
+
+        alert(
+            "⚠️ Solo quedan " +
+            disponibles +
+            " entradas disponibles en este momento."
+        );
+
+        campoCantidad.value = disponibles;
+    }
+
+    if (cantidad < 1 || isNaN(cantidad)) {
+        campoCantidad.value = 1;
+    }
+
+    const cantidadFinal = Number(campoCantidad.value);
+    const precio = Number(eventoTicketeraComprando.precio);
+    const total = cantidadFinal * precio;
+
+    document.getElementById("compraTotal").innerText =
+        "$ " + total.toLocaleString("es-AR");
+}
+
+function continuarCompraTicketera() {
+
+    if (!eventoTicketeraComprando) return;
+
+    const cantidad = Number(
+        document.getElementById("compraCantidad").value
+    );
+
+    const nombre = document.getElementById("compraNombre").value.trim();
+    const dni = document.getElementById("compraDni").value.trim();
+    const whatsapp = document.getElementById("compraWhatsApp").value.trim();
+
+    if (!cantidad || cantidad < 1) {
+        alert("Ingresá una cantidad válida de entradas.");
+        return;
+    }
+
+    const disponiblesActuales = calcularDisponiblesEvento(eventoTicketeraComprando.id, eventoTicketeraComprando.capacidad);
+
+    if (cantidad > disponiblesActuales) {
+        alert(
+            "⚠️ Solo quedan " +
+            disponiblesActuales +
+            " entradas disponibles en este momento."
+        );
+        return;
+    }
+
+    if (!nombre) {
+        alert("Ingresá tu nombre y apellido.");
+        return;
+    }
+
+    if (!dni) {
+        alert("Ingresá tu DNI.");
+        return;
+    }
+
+    if (!whatsapp) {
+        alert("Ingresá tu número de WhatsApp.");
+        return;
+    }
+
+    document.getElementById("pagoEventoNombre").innerText =
+        eventoTicketeraComprando.nombre;
+
+    document.getElementById("pagoEventoFecha").innerText =
+        eventoTicketeraComprando.fecha +
+        " · " +
+        eventoTicketeraComprando.hora +
+        " · " +
+        eventoTicketeraComprando.lugar;
+
+    document.getElementById("pagoCantidad").innerText =
+        cantidad +
+        (cantidad === 1 ? " entrada" : " entradas");
+
+    const precio = Number(eventoTicketeraComprando.precio);
+    const total = cantidad * precio;
+
+    document.getElementById("pagoTotal").innerText =
+        "$ " + total.toLocaleString("es-AR");
+
+    document.getElementById("pagoAlias").innerText =
+        eventoTicketeraComprando.alias || "---";
+
+    document.getElementById("pagoTitular").innerText =
+        eventoTicketeraComprando.titular || "---";
+
+    const bloqueCbu = document.getElementById("bloquePagoCbu");
+    const campoCbu = document.getElementById("pagoCbu");
+
+    if (eventoTicketeraComprando.cbu) {
+        campoCbu.innerText = eventoTicketeraComprando.cbu;
+        bloqueCbu.classList.remove("hidden");
+    } else {
+        campoCbu.innerText = "---";
+        bloqueCbu.classList.add("hidden");
+    }
+
+    const bloqueQr = document.getElementById("bloquePagoQr");
+    const imagenQr = document.getElementById("pagoQr");
+
+    if (eventoTicketeraComprando.qrPagoClave) {
+        imagenQr.src = urlArchivoTicketera(eventoTicketeraComprando.qrPagoClave);
+        bloqueQr.classList.remove("hidden");
+    } else {
+        imagenQr.src = "";
+        bloqueQr.classList.add("hidden");
+    }
+
+    navigate("page-pago-ticketera");
+}
+function renderizarEventosTicketera() {
+
+    const lista = document.getElementById("listaEventosTicketera");
+
+    if (!lista) return;
+
+    if (eventosTicketera.length === 0) {
+        lista.innerHTML = `
+            <div class="text-gray-500 text-center py-8 text-xs italic">
+                No hay eventos creados
+            </div>
+        `;
+        return;
+    }
+
+    const coloresEstado = {
+        publicado: "bg-green-600",
+        pausado: "bg-yellow-500 text-black",
+        oculto: "bg-gray-600"
+    };
+
+    lista.innerHTML = eventosTicketera.map(evento => `
+        <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-3">
+
+            <div class="flex justify-between items-center">
+
+                <div class="min-w-0">
+                    <div class="text-white font-bold text-sm truncate">
+                        ${evento.nombre}
+                    </div>
+
+                    <div class="text-gray-400 text-[10px] mt-1">
+                        ${evento.fecha} · ${evento.hora}
+                    </div>
+
+                    <div class="text-gray-400 text-[10px] mt-0.5">
+                        ${calcularDisponiblesEvento(evento.id, evento.capacidad)} / ${evento.capacidad} disponibles
+                    </div>
+                </div>
+
+                <span class="text-[9px] font-black px-2 py-1 rounded-lg ${coloresEstado[evento.estado] || 'bg-gray-600'} text-white ml-2 whitespace-nowrap">
+                    ${(evento.estado || "").toUpperCase()}
+                </span>
+
+            </div>
+
+            <div class="flex gap-2 mt-3">
+
+                <button onclick="editarEventoTicketera('${evento.id}')"
+                    class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-lg text-[10px]">
+                    EDITAR
+                </button>
+
+                <button onclick="eliminarEventoTicketera('${evento.id}')"
+                    class="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded-lg text-[10px]">
+                    ELIMINAR
+                </button>
+
+            </div>
+
+        </div>
+    `).join("");
+}
+
+function renderizarEventosTicketeraPublica() {
+
+    const lista = document.getElementById("listaEventosTicketeraPublica");
+
+    if (!lista) return;
+
+    const eventosVisibles = eventosTicketera.filter(evento =>
+        evento.estado === "publicado" ||
+        evento.estado === "pausado"
+    );
+
+    if (eventosVisibles.length === 0) {
+
+        lista.innerHTML = `
+            <div class="text-gray-400 text-center py-10 col-span-full">
+                No hay eventos disponibles
+            </div>
+        `;
+
+        return;
+    }
+
+    lista.innerHTML = eventosVisibles.map(evento => {
+
+        const pausado = evento.estado === "pausado";
+        const sinStock = calcularDisponiblesEvento(evento.id, evento.capacidad) <= 0;
+
+        return `
+            <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+
+                <div class="w-full h-56 bg-gray-100 flex items-center justify-center">
+
+                    ${
+                        evento.flyerClave
+                        ? `<img src="${urlArchivoTicketera(evento.flyerClave)}"
+                                class="w-full h-full object-cover"
+                                alt="${evento.nombre}">`
+                        : `<span class="text-gray-400 text-sm">
+                                Sin flyer
+                           </span>`
+                    }
+
+                </div>
+
+                <div class="p-5">
+
+                    <h3 class="text-xl font-black text-gray-900">
+                        ${evento.nombre}
+                    </h3>
+
+                    <div class="text-sm text-gray-500 mt-3">
+                        📅 ${evento.fecha}
+                    </div>
+
+                    <div class="text-sm text-gray-500 mt-1">
+                        🕐 ${evento.hora}
+                    </div>
+
+                    <div class="text-sm text-gray-500 mt-1">
+                        📍 ${evento.lugar}${evento.direccion ? " · " + evento.direccion : ""}
+                    </div>
+
+                    ${
+                        evento.descripcion
+                        ? `<p class="text-sm text-gray-600 mt-3">${evento.descripcion}</p>`
+                        : ""
+                    }
+
+                    <div class="text-lg font-black text-gray-900 mt-4">
+                        $ ${Number(evento.precio || 0).toLocaleString("es-AR")}
+                    </div>
+
+                    ${
+                        pausado
+                        ? `
+                            <button disabled
+                                class="w-full mt-5 bg-gray-300 text-gray-500 font-bold py-3 rounded-xl cursor-not-allowed">
+                                VENTA PAUSADA
+                            </button>
+                          `
+                        : sinStock
+                        ? `
+                            <button disabled
+                                class="w-full mt-5 bg-gray-300 text-gray-500 font-bold py-3 rounded-xl cursor-not-allowed">
+                                SIN ENTRADAS DISPONIBLES
+                            </button>
+                          `
+                        : `
+                            <button
+                                onclick="comprarEntradaTicketera('${evento.id}')"
+                                class="w-full mt-5 bg-black hover:bg-gray-800 text-white font-bold py-3 rounded-xl transition">
+                                COMPRAR ENTRADA
+                            </button>
+                          `
+                    }
+
+                </div>
+
+            </div>
+        `;
+
+    }).join("");
+}
+
+async function guardarNuevoEvento() {
+
+    const nombre = document.getElementById("ticketEventoNombre").value.trim();
+    const flyer = document.getElementById("ticketEventoFlyer").files[0];
+    const fecha = document.getElementById("ticketEventoFecha").value;
+    const hora = document.getElementById("ticketEventoHora").value;
+    const lugar = document.getElementById("ticketEventoLugar").value.trim();
+    const direccion = document.getElementById("ticketEventoDireccion").value.trim();
+    const descripcion = document.getElementById("ticketEventoDescripcion").value.trim();
+
+    const alias = document.getElementById("ticketEventoAlias").value.trim();
+    const titular = document.getElementById("ticketEventoTitular").value.trim();
+    const cbu = document.getElementById("ticketEventoCbu").value.trim();
+    const qr = document.getElementById("ticketEventoQr").files[0];
+
+    const precio = Number(document.getElementById("ticketEventoPrecio").value) || 0;
+    const capacidad = Number(document.getElementById("ticketEventoCapacidad").value) || 0;
+    const estado = document.getElementById("ticketEventoEstado").value;
+
+    if (!nombre || !fecha || !hora || !lugar || !precio || !capacidad) {
+        alert("Completá al menos nombre, fecha, hora, lugar, precio y capacidad.");
+        return;
+    }
+
+    const boton = document.getElementById("botonGuardarEventoTicketera");
+    if (boton) {
+        boton.disabled = true;
+        boton.innerText = "GUARDANDO...";
+    }
+
+    try {
+
+        let flyerClave = "";
+        let qrPagoClave = "";
+
+        if (flyer) flyerClave = await subirArchivoTicketera(flyer, "flyers");
+        if (qr) qrPagoClave = await subirArchivoTicketera(qr, "qr-pago");
+
+        if (eventoTicketeraEditando !== null) {
+
+            const evento = eventosTicketera.find(e => e.id === eventoTicketeraEditando);
+
+            if (!evento) {
+                alert("No se encontró el evento a editar.");
+                return;
+            }
+
+            const datosActualizados = {
+                nombre, fecha, hora, lugar, direccion, descripcion,
+                alias, titular, cbu, precio, capacidad, estado
+            };
+
+            if (flyerClave) datosActualizados.flyerClave = flyerClave;
+            if (qrPagoClave) datosActualizados.qrPagoClave = qrPagoClave;
+
+            await db.collection("ticketera_eventos").doc(evento.id).update(datosActualizados);
+
+            Object.assign(evento, datosActualizados);
+
+            alert("Evento actualizado correctamente.");
+
+        } else {
+
+            const evento = {
+                nombre, fecha, hora, lugar, direccion, descripcion,
+                alias, titular, cbu, precio, capacidad, estado,
+                flyerClave, qrPagoClave
+            };
+
+            const docRef = await db.collection("ticketera_eventos").add(evento);
+
+            evento.id = docRef.id;
+            eventosTicketera.push(evento);
+
+            alert("Evento creado correctamente.");
+        }
+
+        limpiarFormularioEventoTicketera();
+        navigate("page-admin-ticketera");
+
+    } catch (error) {
+
+        console.error("Error guardando evento de Ticketera:", error);
+        alert("No se pudo guardar el evento: " + error.message);
+
+    } finally {
+
+        if (boton) {
+            boton.disabled = false;
+            boton.innerText = "GUARDAR EVENTO";
+        }
+    }
+}
+
+function abrirInstagram() {
+    window.open("https://www.instagram.com/live.djsessions?stkn=ZmFkZXc5Mm80dHRy&utm_source=qr", "_blank");
+    window.close();
+}
+
+async function eliminarEventoTicketera(id) {
+
+    const evento = eventosTicketera.find(e => e.id === id);
+
+    if (!evento) return;
+
+    const tieneVentas = ventasTicketera.some(v => v.eventoId === id);
+
+    if (tieneVentas) {
+
+        const ocultar = confirm(
+            "Este evento ya tiene ventas registradas, por lo que no se puede eliminar " +
+            "(se perdería el historial).\n\n¿Querés OCULTARLO de la cartelera pública en su lugar?"
+        );
+
+        if (ocultar) {
+            try {
+                await db.collection("ticketera_eventos").doc(id).update({ estado: "oculto" });
+                evento.estado = "oculto";
+                renderizarEventosTicketera();
+            } catch (error) {
+                console.error("Error ocultando evento de Ticketera:", error);
+                alert("No se pudo ocultar el evento: " + error.message);
+            }
+        }
+
+        return;
+    }
+
+    const confirmar = confirm(
+        "¿Eliminar este evento?\n\n" +
+        evento.nombre
+    );
+
+    if (!confirmar) return;
+
+    try {
+        await db.collection("ticketera_eventos").doc(id).delete();
+        eventosTicketera = eventosTicketera.filter(e => e.id !== id);
+        renderizarEventosTicketera();
+    } catch (error) {
+        console.error("Error eliminando evento de Ticketera:", error);
+        alert("No se pudo eliminar el evento: " + error.message);
+    }
+}
+
+function editarEventoTicketera(id) {
+
+    const evento = eventosTicketera.find(e => e.id === id);
+
+    if (!evento) return;
+
+    eventoTicketeraEditando = id;
+
+    document.getElementById("ticketEventoNombre").value = evento.nombre || "";
+    document.getElementById("ticketEventoFlyer").value = "";
+    document.getElementById("ticketEventoFecha").value = evento.fecha || "";
+    document.getElementById("ticketEventoHora").value = evento.hora || "";
+    document.getElementById("ticketEventoLugar").value = evento.lugar || "";
+    document.getElementById("ticketEventoDireccion").value = evento.direccion || "";
+    document.getElementById("ticketEventoDescripcion").value = evento.descripcion || "";
+    document.getElementById("ticketEventoAlias").value = evento.alias || "";
+    document.getElementById("ticketEventoTitular").value = evento.titular || "";
+    document.getElementById("ticketEventoCbu").value = evento.cbu || "";
+    document.getElementById("ticketEventoQr").value = "";
+    document.getElementById("ticketEventoPrecio").value = evento.precio || "";
+    document.getElementById("ticketEventoCapacidad").value = evento.capacidad || "";
+    document.getElementById("ticketEventoEstado").value = evento.estado || "publicado";
+
+    document.getElementById("ticketEventoFlyerActual").classList.toggle("hidden", !evento.flyerClave);
+    document.getElementById("ticketEventoQrActual").classList.toggle("hidden", !evento.qrPagoClave);
+
+    document.getElementById("tituloFormularioEventoTicketera").innerText = "EDITAR EVENTO";
+    document.getElementById("botonGuardarEventoTicketera").innerText = "GUARDAR CAMBIOS";
+
+    navigate("page-nuevo-evento-ticketera");
+}
+function cerrarRegistroFinal() {
+            // Cierra la pestaña o limpia la pantalla totalmente
+            window.close();
+            document.body.innerHTML = `
+                <div style="background-color: #050505; color: white; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: sans-serif; text-align: center; padding: 20px;">
+                    <h1 style="font-size: 1.8rem; font-weight: 800; color: #00ffff; margin-bottom: 12px; text-shadow: 0 0 10px #00ffff;">¡REGISTRO COMPLETADO!</h1>
+                    <p style="color: #aaa; font-size: 0.9rem; max-width: 280px;">Tu registro ha finalizado con éxito. Ya puedes cerrar esta ventana.</p>
+                </div>
+            `;
+        }
+
+        function renderizarAdmin() {
+            const contenedorPermanente = document.getElementById("listaPermanente");
+            if(invitados.length === 0) {
+                contenedorPermanente.innerHTML = '<div class="text-gray-500 text-center pt-10 italic">No hay registrados</div>';
+            } else {
+                const ahora = new Date().getTime();
+                const limite24hs = 24 * 60 * 60 * 1000;
+
+                contenedorPermanente.innerHTML = invitados.map(inv => {
+                    let estadoActual = inv.estado;
+                    if(inv.ultimaAsistencia && (ahora - inv.ultimaAsistencia > limite24hs)) {
+                        estadoActual = 'A';
+                    }
+                    return `
+                        <div class="grid grid-cols-12 gap-1 text-center items-center py-1 border-b border-zinc-800/50">
+                            <span class="col-span-4 font-extrabold text-cyan-400">${inv.id}</span>
+                            <span class="col-span-4 truncate">${inv.nombre}</span>
+                            <span class="col-span-2 font-black ${estadoActual === 'P' ? 'text-green-400' : 'text-red-500'}">${estadoActual}</span>
+                            <button onclick="eliminarInvitado('${inv.id}')" class="col-span-2 flex justify-center text-red-500 hover:text-red-400 transition" title="Eliminar ${inv.id}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            const contenedorSorteos = document.getElementById("listaGanadores");
+            if(sorteosRealizados.length === 0) {
+                contenedorSorteos.innerHTML = '<div style="direction: ltr;" class="text-gray-500 text-center pt-6 italic">Sin sorteos aún</div>';
+            } else {
+              contenedorSorteos.innerHTML = sorteosRealizados.map((s, idx) => `
+    <div style="direction: ltr;" class="grid grid-cols-4 gap-2 text-center items-center py-0.5 border-b border-zinc-800">
+        <span class="font-bold text-cyan-400">${s.id}</span>
+        <span class="truncate">${s.nombre}</span>
+        <span class="font-black text-gray-300">Nº ${idx + 1}</span>
+       <button onclick="habilitarDobleChance('${s.id}')" class="${doblesChance.has(s.id) ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'} text-white font-black text-[10px] px-2 py-1 rounded-lg">
+    2ª
+</button>
+    </div>
+`).join('');
+            }
+        }
+function habilitarDobleChance(id) {
+    doblesChance.add(id);
+    renderizarAdmin();
+}
+        async function eliminarInvitado(id) {
+            if(confirm(`¿Estás seguro de eliminar el registro ${id} de la base de datos?`)) {
+                await db.collection("invitados").doc(id).delete();
+            }
+        }
+
+        function buscarIdPorTel() {
+            const telBuscado = document.getElementById("busquedaAdminTel").value.trim().replace(/[^0-9]/g, '');
+            if(!telBuscado) {
+                alert("Ingresa un número de celular.");
+                return;
+            }
+
+            const encontrado = invitados.find(i => i.tel.replace(/[^0-9]/g, '').includes(telBuscado));
+            if(encontrado) {
+                document.getElementById("busquedaAdminTel").value = encontrado.id;
+            } else {
+                alert("No se encontró ningún ID registrado con ese número de celular.");
+            }
+        }
+
+       function realizarSorteo() {
+    if(invitados.length === 0) {
+        alert("No hay personas registradas para sortear.");
+        return;
+    }
+
+    const candidatos = invitados.filter(inv => {
+        const victorias = sorteosRealizados.filter(s => s.id === inv.id).length;
+
+        // Nunca puede ganar más de 2 veces
+        if(victorias >= 2) return false;
+
+        // Si ya ganó una vez, necesita Doble Chance
+        if(victorias === 1 && !doblesChance.has(inv.id)) return false;
+
+        return true;
+    });
+
+    if(candidatos.length === 0) {
+        alert("No hay participantes habilitados para realizar otro sorteo.");
+        return;
+    }
+
+    const indiceAleatorio = Math.floor(Math.random() * candidatos.length);
+    const ganador = candidatos[indiceAleatorio];
+
+    document.getElementById("idGanadorDisplay").innerText = ganador.id;
+
+    sorteosRealizados.push({
+        id: ganador.id,
+        nombre: ganador.nombre
+    });
+
+    // Si utilizó su Doble Chance, queda consumida
+    doblesChance.delete(ganador.id);
+
+    renderizarAdmin();
+}
+
+       function restaurarSorteos() {
+    sorteosRealizados = [];
+    doblesChance.clear();
+    document.getElementById("idGanadorDisplay").innerText = "---";
+    renderizarAdmin();
+}
+
+        async function enviarPDFWhatsApp() {
+            if(invitados.length === 0) {
+                alert("No hay invitados registrados para exportar.");
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            doc.setFontSize(16);
+            doc.text("LIVE DJ SESSIONS - REPORTE DE INVITADOS", 14, 18);
+            
+            doc.setFontSize(10);
+            const fechaActual = new Date().toLocaleDateString('es-AR') + " " + new Date().toLocaleTimeString('es-AR', {hour: '2-digit', minute:'2-digit'});
+            doc.text(`Fecha de emisión: ${fechaActual}`, 14, 25);
+
+            const headers = [["ID", "Nombre/Apodo", "Teléfono", "F. Nac.", "Música", "Origen", "Estado"]];
+            const rows = invitados.map(i => [
+                i.id, i.nombre, i.tel, i.fecha, i.musica, i.lugar,
+                i.estado === 'P' ? 'Presente (P)' : 'Ausente (A)'
+            ]);
+
+            doc.autoTable({
+                startY: 30,
+                head: headers,
+                body: rows,
+                theme: 'striped',
+                headStyles: { fillColor: [0, 180, 216], textColor: [255, 255, 255], fontStyle: 'bold' },
+                styles: { fontSize: 8, cellPadding: 2.5 }
+            });
+
+            const fileName = `Reporte_LiveDJ_${new Date().toISOString().slice(0,10)}.pdf`;
+            const pdfBlob = doc.output('blob');
+            const pdfFile = new File([pdfBlob], fileName, { type: "application/pdf" });
+
+            const destino = "5491144060818";
+            const esMovil = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+            if (esMovil && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+                try {
+                    await navigator.share({
+                        files: [pdfFile],
+                        title: 'Reporte Live DJ Sessions',
+                        text: 'Adjunto el reporte completo de invitados en formato PDF.'
+                    });
+                } catch (err) {
+                    console.log("Acción de compartir cancelada:", err);
+                }
+            } else {
+                doc.save(fileName);
+                const mensaje = "Hola, adjunto el reporte en PDF con la lista completa de invitados de Live DJ Sessions.";
+                const url = `https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`;
+                
+                alert("Se descargó el archivo PDF en tu equipo.\n\nA continuación se abrirá WhatsApp Web para que adjuntes el archivo descargado.");
+                window.open(url, '_blank');
+            }
+        }
+    </script>
+</body>
+</html>
