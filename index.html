@@ -30,7 +30,8 @@
         .active { display: flex; }
 
         input { background: rgba(255,255,255,0.05); border: 1px solid #444; border-radius: 12px; padding: 8px 16px; color: white; margin-bottom: 12px; width: 100%; text-align: center; font-size: 14px; }
-        input:focus { outline: none; border-color: #00ffff; box-shadow: 0 0 10px rgba(0,255,255,0.5); }          textarea, select { background: #ffffff; border: 1px solid #444; border-radius: 12px; padding: 8px 16px; color: #111; margin-bottom: 12px; width: 100%; font-size: 14px; }         textarea:focus, select:focus { outline: none; border-color: #00ffff; }
+        input:focus { outline: none; border-color: #00ffff; box-shadow: 0 0 10px rgba(0,255,255,0.5); }         
+        textarea, select { background: #ffffff; border: 1px solid #444; border-radius: 12px; padding: 8px 16px; color: #111; margin-bottom: 12px; width: 100%; font-size: 14px; }         textarea:focus, select:focus { outline: none; border-color: #00ffff; }
 
         @keyframes popIn {
             0% { transform: scale(0.7); opacity: 0; }
@@ -41,6 +42,7 @@
     </style>
 </head>
 <body>
+    <audio id="sonidoAvisoVenta" src="aviso.mp3" preload="auto"></audio>
 
     <!-- ==================== PÁGINA 1: QR ==================== -->
     <div id="page-qr" class="page active">
@@ -1318,6 +1320,9 @@ function abrirTicketeraAdmin() {
 
     if (clave === ".mkm**") {
         navigate("page-admin-ticketera");
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+        }
     } else if (clave !== null) {
         alert("Contraseña incorrecta.");
     }
@@ -2108,11 +2113,22 @@ let entradasTicketeraCargadas = false;
 const ventaDesdeURL = new URLSearchParams(window.location.search).get('venta');
 let yaNavegoAVentaDesdeURL = false;
 
+let idsVentasPendientesConocidas = new Set();
+let primeraCargaVentas = true;
+
 db.collection("ticketera_ventas").onSnapshot((snapshot) => {
 
     ventasTicketera = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     ventasTicketera.sort((a, b) => (b.fechaVenta || "").localeCompare(a.fechaVenta || ""));
     ventasTicketeraCargadas = true;
+
+    const pendientesActuales = ventasTicketera.filter(v => v.estado === "pendiente");
+    if (!primeraCargaVentas) {
+        const nuevasPendientes = pendientesActuales.filter(v => !idsVentasPendientesConocidas.has(v.id));
+        if (nuevasPendientes.length > 0) avisarNuevaVentaPendiente(nuevasPendientes.length);
+    }
+    primeraCargaVentas = false;
+    idsVentasPendientesConocidas = new Set(pendientesActuales.map(v => v.id));
 
     if (document.getElementById("listaVentasTicketera")) renderizarVentasTicketera();
     if (document.getElementById("listaPagosTicketera") && eventoTicketeraPagosActual) renderizarPagosTicketera(eventoTicketeraPagosActual);
@@ -2120,6 +2136,17 @@ db.collection("ticketera_ventas").onSnapshot((snapshot) => {
 }, (error) => {
     console.error("Error cargando ventas de Ticketera:", error);
 });
+
+function avisarNuevaVentaPendiente(cantidad) {
+    const audio = document.getElementById("sonidoAvisoVenta");
+    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+
+    if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("Nueva entrada por aprobar", {
+            body: cantidad === 1 ? "Hay 1 venta pendiente de aprobación." : `Hay ${cantidad} ventas pendientes de aprobación.`
+        });
+    }
+}
 
 db.collection("ticketera_entradas").onSnapshot((snapshot) => {
 
