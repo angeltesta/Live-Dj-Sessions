@@ -1584,13 +1584,7 @@ const mensajeAviso = `🎫 Nueva venta pendiente\nEvento: ${eventoTicketeraCompr
 
 fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage?chat_id=${telegramChatId}&text=${encodeURIComponent(mensajeAviso)}`)
     .catch(e => console.error("No se pudo avisar por Telegram:", e));
-onst telegramToken = "8940197734:AAGrtPCVTAlfkWP0H1WuFMc92RsIQp-5PVk";
-const telegramChatId = "1514621643";
 
-const mensajeAviso = `🎫 Nueva venta pendiente\nEvento: ${eventoTicketeraComprando.nombre}\nComprador: ${nombre}\nCantidad: ${cantidad}\nTotal: $${total}`;
-
-fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage?chat_id=${telegramChatId}&text=${encodeURIComponent(mensajeAviso)}`)
-    .catch(e => console.error("No se pudo avisar por Telegram:", e));
         document.getElementById("confirmacionNumeroVenta").innerText = numeroVenta;
 
         document.getElementById("ticketComprobante").value = "";
