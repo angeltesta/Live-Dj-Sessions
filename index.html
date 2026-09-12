@@ -29,9 +29,16 @@
         .page { display: none; min-height: 100vh; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
         .active { display: flex; }
 
+        textarea, select { background: rgba(255,255,255,0.05); border: 1px solid #444; border-radius: 12px; padding: 8px 16px; color: white; margin-bottom: 12px; width: 100%; font-size: 14px; }
+        textarea:focus, select:focus { outline: none; border-color: #00ffff; box-shadow: 0 0 10px rgba(0,255,255,0.5); }
+        select option { background: #111; color: white; }
+
         input { background: rgba(255,255,255,0.05); border: 1px solid #444; border-radius: 12px; padding: 8px 16px; color: white; margin-bottom: 12px; width: 100%; text-align: center; font-size: 14px; }
-        input:focus { outline: none; border-color: #00ffff; box-shadow: 0 0 10px rgba(0,255,255,0.5); }         
-        textarea, select { background: #ffffff; border: 1px solid #444; border-radius: 12px; padding: 8px 16px; color: #111; margin-bottom: 12px; width: 100%; font-size: 14px; }         textarea:focus, select:focus { outline: none; border-color: #00ffff; }
+        input:focus { outline: none; border-color: #00ffff; box-shadow: 0 0 10px rgba(0,255,255,0.5); }
+
+        textarea, select { background: #ffffff !important; border: 1px solid #444; border-radius: 12px; padding: 8px 16px; color: #111 !important; margin-bottom: 12px; width: 100%; font-size: 14px; }
+select option { background: #ffffff !important; color: #111 !important; }
+        textarea:focus, select:focus { outline: none; border-color: #00ffff; }
 
         @keyframes popIn {
             0% { transform: scale(0.7); opacity: 0; }
@@ -42,7 +49,6 @@
     </style>
 </head>
 <body>
-    <audio id="sonidoAvisoVenta" src="aviso.mp3" preload="auto"></audio>
 
     <!-- ==================== PÁGINA 1: QR ==================== -->
     <div id="page-qr" class="page active">
@@ -236,7 +242,7 @@
         </div>
 
     </div>
-<button onclick="navigate('page-ticketera-publica')" class="w-full mb-3 bg-black hover:bg-gray-800 text-white font-bold px-6 py-3 rounded-xl text-xs">
+<button onclick="abrirCarteleraPublicaEnNuevaPestana()" class="w-full mb-3 bg-black hover:bg-gray-800 text-white font-bold px-6 py-3 rounded-xl text-xs">
     👁️ VER CARTELERA PÚBLICA
 </button>
     <button onclick="navigate('page-admin')" class="w-full mt-5 bg-zinc-800 border border-zinc-600 hover:bg-zinc-700 text-white font-bold px-6 py-3 rounded-xl text-xs">
@@ -1066,7 +1072,12 @@ async function subirArchivoTicketera(archivo, tipo) {
     try {
         resultado = await respuesta.json();
     } catch (e) {
-        throw new Error("El servidor de archivos no respondió correctamente.");
+        const textoCrudo = await respuesta.text().catch(() => "(sin cuerpo)");
+        console.error("Respuesta no-JSON del servidor de archivos:", respuesta.status, textoCrudo);
+        throw new Error(
+            "El servidor de archivos no respondió correctamente (código " +
+            respuesta.status + "). Detalle en la consola del navegador (F12)."
+        );
     }
 
     if (!resultado || !resultado.ok) {
@@ -1176,13 +1187,19 @@ let doblesChance = new Set();
             }
         }
 
-        window.onload = async function() {
+        function abrirCarteleraPublicaEnNuevaPestana() {
+    const url = window.location.href.split('?')[0] + "?go=ticketera-publica";
+    window.open(url, "_blank");
+}
+
+window.onload = async function() {
 
     await cargarEventosTicketera();
 
     const urlParams = new URLSearchParams(window.location.search);
 
     if(urlParams.get('go') === 'ingreso') navigate('page-ingreso');
+    else if(urlParams.get('go') === 'ticketera-publica') navigate('page-ticketera-publica');
 
     else generarQRCodigo();
 
@@ -1320,9 +1337,6 @@ function abrirTicketeraAdmin() {
 
     if (clave === ".mkm**") {
         navigate("page-admin-ticketera");
-        if ("Notification" in window && Notification.permission === "default") {
-            Notification.requestPermission();
-        }
     } else if (clave !== null) {
         alert("Contraseña incorrecta.");
     }
@@ -1582,14 +1596,13 @@ async function enviarComprobanteTicketera() {
         };
 
         const docRef = await db.collection("ticketera_ventas").add(venta);
-        const telegramToken = "8940197734:AAGrtPCVTAlfkWP0H1WuFMc92RsIQp-5PVk";
+const telegramToken = "8940197734:AAGrtPCVTAlfkWP0H1WuFMc92RsIQp-5PVk";
 const telegramChatId = "1514621643";
 
 const mensajeAviso = `🎫 Nueva venta pendiente\nEvento: ${eventoTicketeraComprando.nombre}\nComprador: ${nombre}\nCantidad: ${cantidad}\nTotal: $${total}`;
 
 fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage?chat_id=${telegramChatId}&text=${encodeURIComponent(mensajeAviso)}`)
     .catch(e => console.error("No se pudo avisar por Telegram:", e));
-
         document.getElementById("confirmacionNumeroVenta").innerText = numeroVenta;
 
         document.getElementById("ticketComprobante").value = "";
@@ -1886,7 +1899,7 @@ function compartirEntradasWhatsApp(ventaId) {
         ? `https://api.whatsapp.com/send?phone=${telLimpio}&text=${encodeURIComponent(mensaje)}`
         : `https://api.whatsapp.com/send?text=${encodeURIComponent(mensaje)}`;
 
-    window.open(urlWspp, "_blank");
+    window.location.href = urlWspp;
 }
 
 function renderizarMisEntradas(ventaId) {
@@ -2113,22 +2126,11 @@ let entradasTicketeraCargadas = false;
 const ventaDesdeURL = new URLSearchParams(window.location.search).get('venta');
 let yaNavegoAVentaDesdeURL = false;
 
-let idsVentasPendientesConocidas = new Set();
-let primeraCargaVentas = true;
-
 db.collection("ticketera_ventas").onSnapshot((snapshot) => {
 
     ventasTicketera = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     ventasTicketera.sort((a, b) => (b.fechaVenta || "").localeCompare(a.fechaVenta || ""));
     ventasTicketeraCargadas = true;
-
-    const pendientesActuales = ventasTicketera.filter(v => v.estado === "pendiente");
-    if (!primeraCargaVentas) {
-        const nuevasPendientes = pendientesActuales.filter(v => !idsVentasPendientesConocidas.has(v.id));
-        if (nuevasPendientes.length > 0) avisarNuevaVentaPendiente(nuevasPendientes.length);
-    }
-    primeraCargaVentas = false;
-    idsVentasPendientesConocidas = new Set(pendientesActuales.map(v => v.id));
 
     if (document.getElementById("listaVentasTicketera")) renderizarVentasTicketera();
     if (document.getElementById("listaPagosTicketera") && eventoTicketeraPagosActual) renderizarPagosTicketera(eventoTicketeraPagosActual);
@@ -2136,17 +2138,6 @@ db.collection("ticketera_ventas").onSnapshot((snapshot) => {
 }, (error) => {
     console.error("Error cargando ventas de Ticketera:", error);
 });
-
-function avisarNuevaVentaPendiente(cantidad) {
-    const audio = document.getElementById("sonidoAvisoVenta");
-    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
-
-    if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("Nueva entrada por aprobar", {
-            body: cantidad === 1 ? "Hay 1 venta pendiente de aprobación." : `Hay ${cantidad} ventas pendientes de aprobación.`
-        });
-    }
-}
 
 db.collection("ticketera_entradas").onSnapshot((snapshot) => {
 
@@ -2617,40 +2608,29 @@ async function eliminarEventoTicketera(id) {
 
     if (!evento) return;
 
-    const tieneVentas = ventasTicketera.some(v => v.eventoId === id);
+    const ventasDelEvento = ventasTicketera.filter(v => v.eventoId === id);
+    const entradasDelEvento = entradasTicketera.filter(e => e.eventoId === id);
 
-    if (tieneVentas) {
+    const mensajeConfirmacion = ventasDelEvento.length > 0
+        ? `⚠️ ATENCIÓN ⚠️\n\nEste evento tiene ${ventasDelEvento.length} venta(s) y ${entradasDelEvento.length} entrada(s) generadas.\n\n` +
+          `Si continuás, se borra TODO de forma DEFINITIVA (el evento, sus ventas y sus entradas). No se puede deshacer.\n\n` +
+          `"${evento.nombre}"\n\n¿Eliminar de todas formas?`
+        : `¿Eliminar este evento?\n\n${evento.nombre}`;
 
-        const ocultar = confirm(
-            "Este evento ya tiene ventas registradas, por lo que no se puede eliminar " +
-            "(se perdería el historial).\n\n¿Querés OCULTARLO de la cartelera pública en su lugar?"
-        );
-
-        if (ocultar) {
-            try {
-                await db.collection("ticketera_eventos").doc(id).update({ estado: "oculto" });
-                evento.estado = "oculto";
-                renderizarEventosTicketera();
-            } catch (error) {
-                console.error("Error ocultando evento de Ticketera:", error);
-                alert("No se pudo ocultar el evento: " + error.message);
-            }
-        }
-
-        return;
-    }
-
-    const confirmar = confirm(
-        "¿Eliminar este evento?\n\n" +
-        evento.nombre
-    );
-
-    if (!confirmar) return;
+    if (!confirm(mensajeConfirmacion)) return;
 
     try {
-        await db.collection("ticketera_eventos").doc(id).delete();
+        const lote = db.batch();
+
+        lote.delete(db.collection("ticketera_eventos").doc(id));
+        ventasDelEvento.forEach(v => lote.delete(db.collection("ticketera_ventas").doc(v.id)));
+        entradasDelEvento.forEach(e => lote.delete(db.collection("ticketera_entradas").doc(e.id)));
+
+        await lote.commit();
+
         eventosTicketera = eventosTicketera.filter(e => e.id !== id);
         renderizarEventosTicketera();
+
     } catch (error) {
         console.error("Error eliminando evento de Ticketera:", error);
         alert("No se pudo eliminar el evento: " + error.message);
@@ -2868,9 +2848,65 @@ function habilitarDobleChance(id) {
                 const url = `https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`;
                 
                 alert("Se descargó el archivo PDF en tu equipo.\n\nA continuación se abrirá WhatsApp Web para que adjuntes el archivo descargado.");
-                window.open(url, '_blank');
+                window.location.href = url;
             }
         }
+        // =====================================================================
+// AUTOCOMPLETAR (recuerda lo último tipeado en cada campo, por navegador)
+// =====================================================================
+function activarAutocompletado(idsCampos) {
+    idsCampos.forEach((idCampo) => {
+        const input = document.getElementById(idCampo);
+        if (!input) return;
+
+        const claveStorage = "autocompletar_" + idCampo;
+        const idDatalist = "datalist_" + idCampo;
+
+        let valoresGuardados = [];
+        try {
+            valoresGuardados = JSON.parse(localStorage.getItem(claveStorage) || "[]");
+        } catch (e) {
+            valoresGuardados = [];
+        }
+
+        let datalist = document.getElementById(idDatalist);
+        if (!datalist) {
+            datalist = document.createElement("datalist");
+            datalist.id = idDatalist;
+            document.body.appendChild(datalist);
+        }
+
+        function repintarDatalist(valores) {
+            datalist.innerHTML = valores
+                .map(v => `<option value="${v.replace(/"/g, "&quot;")}"></option>`)
+                .join("");
+        }
+
+        repintarDatalist(valoresGuardados);
+        input.setAttribute("list", idDatalist);
+
+        input.addEventListener("change", () => {
+            const valor = input.value.trim();
+            if (!valor) return;
+
+            valoresGuardados = valoresGuardados.filter(v => v.toLowerCase() !== valor.toLowerCase());
+            valoresGuardados.unshift(valor);
+            valoresGuardados = valoresGuardados.slice(0, 25);
+
+            localStorage.setItem(claveStorage, JSON.stringify(valoresGuardados));
+            repintarDatalist(valoresGuardados);
+        });
+    });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    activarAutocompletado([
+        "regMusica", "regLugar",
+        "ticketEventoNombre", "ticketEventoLugar", "ticketEventoDireccion",
+        "ticketEventoAlias", "ticketEventoTitular", "ticketEventoCbu",
+        "compraDni"
+    ]);
+});
     </script>
 </body>
 </html>
