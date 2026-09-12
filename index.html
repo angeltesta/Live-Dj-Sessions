@@ -2433,6 +2433,7 @@ function renderizarEventosTicketeraPublica() {
     lista.innerHTML = eventosVisibles.map(evento => {
 
         const pausado = evento.estado === "pausado";
+        const finalizada = ventaAnticipadaFinalizada(evento);
         const sinStock = calcularDisponiblesEvento(evento.id, evento.capacidad) <= 0;
 
         return `
