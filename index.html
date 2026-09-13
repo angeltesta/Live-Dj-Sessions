@@ -2954,6 +2954,22 @@ document.addEventListener("DOMContentLoaded", () => {
         "compraDni"
     ]);
 });
+       // Detectar si hay un parámetro 'go' en la URL al cargar la página
+window.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const destino = urlParams.get('go');
+    
+    if (destino) {
+        // Buscamos si existe una página que coincida con el destino
+        const targetPage = document.getElementById('page-' + destino);
+        if (targetPage) {
+            // Ocultamos todas las páginas activas
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            // Activamos únicamente la página destino de forma inmediata
+            targetPage.classList.add('active');
+        }
+    }
+});
     </script>
 </body>
 </html>
