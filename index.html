@@ -602,6 +602,7 @@ select option { background: #ffffff !important; color: #111 !important; }
         step="1"
         inputmode="numeric"
         oninput="actualizarTotalCompra()"
+        onblur="corregirCantidadCompraAlSalir()"
         class="w-full mt-2 border border-gray-300 rounded-xl px-4 py-3 bg-white"
     >
 
@@ -2223,7 +2224,7 @@ function actualizarTotalCompra() {
     const cantidad = Number(campoCantidad.value);
     const disponibles = Number(eventoTicketeraComprando.disponibles);
 
-    if (cantidad > disponibles) {
+    if (campoCantidad.value !== "" && cantidad > disponibles) {
 
         alert(
             "⚠️ Solo quedan " +
@@ -2234,16 +2235,23 @@ function actualizarTotalCompra() {
         campoCantidad.value = disponibles;
     }
 
-    if (cantidad < 1 || isNaN(cantidad)) {
-        campoCantidad.value = 1;
-    }
-
-    const cantidadFinal = Number(campoCantidad.value);
+    const cantidadFinal = Number(campoCantidad.value) || 0;
     const precio = Number(eventoTicketeraComprando.precio);
     const total = cantidadFinal * precio;
 
     document.getElementById("compraTotal").innerText =
         "$ " + total.toLocaleString("es-AR");
+}
+
+function corregirCantidadCompraAlSalir() {
+
+    const campoCantidad = document.getElementById("compraCantidad");
+    const cantidad = Number(campoCantidad.value);
+
+    if (campoCantidad.value === "" || isNaN(cantidad) || cantidad < 1) {
+        campoCantidad.value = 1;
+        actualizarTotalCompra();
+    }
 }
 
 function continuarCompraTicketera() {
