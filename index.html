@@ -5,24 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live DJ Sessions</title>
     <script>
-    (function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const destino = urlParams.get('go');
-        // Si hay un destino específico, evitamos que cargue la página QR por defecto
-        document.addEventListener("DOMContentLoaded", function() {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            if (destino === 'ingreso') {
-                document.getElementById('page-ingreso').classList.add('active');
-            } else if (destino === 'ticketera-publica') {
-                document.getElementById('page-ticketera-publica').classList.add('active');
-            } else if (destino === 'control-ticketera') {
-                document.getElementById('page-control-ticketera').classList.add('active');
-            } else {
-                document.getElementById('page-qr').classList.add('active');
-            }
-        });
-    })();
-    </script>
+    if (new URLSearchParams(window.location.search).get('go')) {
+        document.write('<style>#page-qr{display:none !important;}</style>');
+    }
+</script>
     <!-- Tailwind CSS -->
    <script src="https://cdn.tailwindcss.com"></script>
     <!-- Librería QR -->
@@ -69,8 +55,8 @@ select option { background: #ffffff !important; color: #111 !important; }
 </head>
 <body>
 
-<!-- ==================== PÁGINA 1: QR ==================== -->
-    <div id="page-qr" class="page">
+    <!-- ==================== PÁGINA 1: QR ==================== -->
+    <div id="page-qr" class="page active">
         <h1 class="text-4xl font-extrabold neon-text mb-1 tracking-wider">LIVE</h1>
         <h2 class="text-2xl font-bold neon-blue mb-8 tracking-widest">DJ SESSIONS</h2>
         
