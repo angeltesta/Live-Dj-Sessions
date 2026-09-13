@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live DJ Sessions</title>
+    <script>
+    if (new URLSearchParams(window.location.search).get('go')) {
+        document.write('<style>#page-qr{display:none !important;}</style>');
+    }
+</script>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Librería QR -->
@@ -1199,14 +1204,29 @@ let doblesChance = new Set();
 
 window.onload = async function() {
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const destino = urlParams.get('go');
+
+    if(destino === 'ingreso') navigate('page-ingreso');
+    else if(destino === 'ticketera-publica') navigate('page-ticketera-publica');
+    else if(destino === 'control-ticketera') navigate('page-control-ticketera');
+
     await cargarEventosTicketera();
 
-    const urlParams = new URLSearchParams(window.location.search);
+    if(destino === 'ticketera-publica') renderizarEventosTicketeraPublica();
 
-    if(urlParams.get('go') === 'ingreso') navigate('page-ingreso');
-    else if(urlParams.get('go') === 'ticketera-publica') navigate('page-ticketera-publica');
-    else if(urlParams.get('go') === 'control-ticketera') navigate('page-control-ticketera');
-    else generarQRCodigo();
+    if(!destino) generarQRCodigo();
+
+    const revisarVentaId = urlParams.get('revisar');
+    if (revisarVentaId) {
+        const esperarVenta = setInterval(() => {
+            const venta = ventasTicketera.find(v => v.id === revisarVentaId);
+            if (venta) {
+                clearInterval(esperarVenta);
+                verPagosEventoTicketera(venta.eventoId);
+            }
+        }, 300);
+    }
 
 };
 
