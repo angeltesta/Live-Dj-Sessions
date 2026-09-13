@@ -4,17 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live DJ Sessions</title>
-   <script>
-    const urlParams = new URLSearchParams(window.location.search);
-    const destinoParam = urlParams.get('go');
-    const ventaParam = urlParams.get('venta');
-    
-    if (destinoParam || ventaParam) {
-        document.write('<style>.page { display: none !important; }</style>');
-    } else {
-        document.write('<style>#page-qr { display: flex !important; }</style>');
-    }
-</script>
+    <script>
+    (function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const destino = urlParams.get('go');
+        // Si hay un destino específico, evitamos que cargue la página QR por defecto
+        document.addEventListener("DOMContentLoaded", function() {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            if (destino === 'ingreso') {
+                document.getElementById('page-ingreso').classList.add('active');
+            } else if (destino === 'ticketera-publica') {
+                document.getElementById('page-ticketera-publica').classList.add('active');
+            } else if (destino === 'control-ticketera') {
+                document.getElementById('page-control-ticketera').classList.add('active');
+            } else {
+                document.getElementById('page-qr').classList.add('active');
+            }
+        });
+    })();
+    </script>
     <!-- Tailwind CSS -->
    <script src="https://cdn.tailwindcss.com"></script>
     <!-- Librería QR -->
@@ -62,7 +70,7 @@ select option { background: #ffffff !important; color: #111 !important; }
 <body>
 
 <!-- ==================== PÁGINA 1: QR ==================== -->
-<div id="page-qr" class="page">
+    <div id="page-qr" class="page">
         <h1 class="text-4xl font-extrabold neon-text mb-1 tracking-wider">LIVE</h1>
         <h2 class="text-2xl font-bold neon-blue mb-8 tracking-widest">DJ SESSIONS</h2>
         
@@ -1209,28 +1217,19 @@ let doblesChance = new Set();
 }
 
 window.onload = async function() {
+
     const urlParams = new URLSearchParams(window.location.search);
     const destino = urlParams.get('go');
-    const ventaIdURL = urlParams.get('venta');
 
-    // Manejo inmediato de rutas directas sin mostrar QR
-    if (destino === 'ingreso') {
-        navigate('page-ingreso');
-    } else if (destino === 'ticketera-publica') {
-        navigate('page-ticketera-publica');
-    } else if (destino === 'control-ticketera') {
-        navigate('page-control-ticketera');
-    } else if (ventaIdURL) {
-        // Se manejará al cargar las entradas
-    } else {
-        navigate('page-qr');
-    }
+    if(destino === 'ingreso') navigate('page-ingreso');
+    else if(destino === 'ticketera-publica') navigate('page-ticketera-publica');
+    else if(destino === 'control-ticketera') navigate('page-control-ticketera');
 
     await cargarEventosTicketera();
 
-    if (destino === 'ticketera-publica') {
-        renderizarEventosTicketeraPublica();
-    }
+    if(destino === 'ticketera-publica') renderizarEventosTicketeraPublica();
+
+    if(!destino) generarQRCodigo();
 
     const revisarVentaId = urlParams.get('revisar');
     if (revisarVentaId) {
@@ -1242,6 +1241,7 @@ window.onload = async function() {
             }
         }, 300);
     }
+
 };
 
         function generarSiguienteID() {
